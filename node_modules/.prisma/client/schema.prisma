@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+}
+
+enum GalleryCategory {
+  ASSOCIATION
+  POLITICAL_ACHIEVEMENT
+  IMAGE
+  DIRECTORY
+  LETTER
+}
+
+model Admin {
+  id String @id @default(cuid())
+
+  firstName String
+  lastName  String
+
+  email String  @unique
+  phone String? @unique
+
+  password String
+
+  role     Role    @default(ADMIN)
+  isActive Boolean @default(true)
+
+  createdById String?
+
+  createdBy Admin?  @relation("AdminCreator", fields: [createdById], references: [id])
+  admins    Admin[] @relation("AdminCreator")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Gallery {
+  id          String          @id @default(cuid())
+  title       String
+  description String?
+  imageUrl    String
+  publicId    String
+  category    GalleryCategory
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
