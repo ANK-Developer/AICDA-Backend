@@ -3,7 +3,7 @@ import prisma from "../config/prisma.js";
 import fs from "fs-extra";
 import path from "path";
 
-const categories = [
+const GALLERY_CATEGORIES = [
   "ASSOCIATION",
   "POLITICAL_ACHIEVEMENT",
   "IMAGE",
@@ -11,25 +11,32 @@ const categories = [
   "LETTER",
 ];
 
+// ==========================
+// Upload Image
+// ==========================
 export const uploadImage = async (req, res) => {
-  let uploadResult;
+  let uploadedImage = null;
 
   try {
     const { title, description, category } = req.body;
 
     if (!req.file) {
-      return res.status(400).json({ success: false, message: "Image is required" });
-    }
-
-    if (!category || !categories.includes(category)) {
       return res.status(400).json({
         success: false,
-        message: `Category must be one of: ${categories.join(", ")}`,
+        message: "Image is required",
+      });
+    }
+
+    if (!category || !GALLERY_CATEGORIES.includes(category)) {
+      return res.status(400).json({
+        success: false,
+        message: `Category must be one of: ${GALLERY_CATEGORIES.join(", ")}`,
       });
     }
 
     const filePath = path.resolve(req.file.path);
-    uploadResult = await cloudinary.uploader.upload(filePath, {
+
+    uploadedImage = await cloudinary.uploader.upload(filePath, {
       folder: "aicda/gallery",
       resource_type: "image",
     });
@@ -39,8 +46,8 @@ export const uploadImage = async (req, res) => {
         title: title?.trim() || req.file.originalname,
         description: description?.trim() || null,
         category,
-        imageUrl: uploadResult.secure_url,
-        publicId: uploadResult.public_id,
+        imageUrl: uploadedImage.secure_url,
+        publicId: uploadedImage.public_id,
       },
     });
 
@@ -50,11 +57,12 @@ export const uploadImage = async (req, res) => {
       gallery,
     });
   } catch (error) {
-    if (uploadResult?.public_id) {
-      await cloudinary.uploader.destroy(uploadResult.public_id).catch(() => {});
+    if (uploadedImage?.public_id) {
+      await cloudinary.uploader.destroy(uploadedImage.public_id).catch(() => {});
     }
 
-    console.error("Gallery Upload Error:", error);
+    console.error(error);
+
     return res.status(500).json({
       success: false,
       message: error.message || "Unable to upload image",
@@ -66,20 +74,25 @@ export const uploadImage = async (req, res) => {
   }
 };
 
+// ==========================
+// Get Gallery Images
+// ==========================
 export const getGalleryImages = async (req, res) => {
   try {
-    const category = req.params.category || req.query.category;
+    const { category } = req.query;
 
-    if (category && !categories.includes(category)) {
+    if (category && !GALLERY_CATEGORIES.includes(category)) {
       return res.status(400).json({
         success: false,
-        message: `Category must be one of: ${categories.join(", ")}`,
+        message: `Category must be one of: ${GALLERY_CATEGORIES.join(", ")}`,
       });
     }
 
     const gallery = await prisma.gallery.findMany({
-      where: category ? { category } : undefined,
-      orderBy: { createdAt: "desc" },
+      where: category ? { category } : {},
+      orderBy: {
+        createdAt: "desc",
+      },
     });
 
     return res.status(200).json({
@@ -88,71 +101,135 @@ export const getGalleryImages = async (req, res) => {
       gallery,
     });
   } catch (error) {
-    console.error("Get Gallery Error:", error);
-    return res.status(500).json({ success: false, message: "Unable to fetch gallery" });
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to fetch gallery",
+    });
   }
 };
 
-export const updateGalleryImage = async (req, res) => {
-  let uploadResult;
-
+// ==========================
+// Get Single Image
+// ==========================
+export const getSingleGalleryImage = async (req, res) => {
   try {
-    const gallery = await prisma.gallery.findUnique({ where: { id: req.params.id } });
-    if (!gallery) {
-      return res.status(404).json({ success: false, message: "Gallery image not found" });
-    }
-
-    const { category, title, description } = req.body;
-    if (category !== undefined && !categories.includes(category)) {
-      return res.status(400).json({
-        success: false,
-        message: `Category must be one of: ${categories.join(", ")}`,
-      });
-    }
-
-    const data = {};
-    if (category !== undefined) data.category = category;
-    if (title !== undefined) data.title = title.trim();
-    if (description !== undefined) data.description = description.trim() || null;
-
-    if (req.file) {
-      uploadResult = await cloudinary.uploader.upload(path.resolve(req.file.path), {
-        folder: "aicda/gallery",
-        resource_type: "image",
-      });
-      data.imageUrl = uploadResult.secure_url;
-      data.publicId = uploadResult.public_id;
-    }
-
-    if (Object.keys(data).length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Provide a category, title, description, or image to update",
-      });
-    }
-
-    const updatedGallery = await prisma.gallery.update({
-      where: { id: gallery.id },
-      data,
+    const gallery = await prisma.gallery.findUnique({
+      where: {
+        id: req.params.id,
+      },
     });
 
-    if (uploadResult) {
-      await cloudinary.uploader.destroy(gallery.publicId).catch((error) => {
-        console.error("Old Cloudinary image cleanup failed:", error.message);
+    if (!gallery) {
+      return res.status(404).json({
+        success: false,
+        message: "Gallery image not found",
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: "Gallery image updated successfully",
+      gallery,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to fetch image",
+    });
+  }
+};
+
+// ==========================
+// Update Image
+// ==========================
+export const updateGalleryImage = async (req, res) => {
+  let uploadedImage = null;
+
+  try {
+    const gallery = await prisma.gallery.findUnique({
+      where: {
+        id: req.params.id,
+      },
+    });
+
+    if (!gallery) {
+      return res.status(404).json({
+        success: false,
+        message: "Gallery image not found",
+      });
+    }
+
+    const { title, description, category } = req.body;
+
+    if (category && !GALLERY_CATEGORIES.includes(category)) {
+      return res.status(400).json({
+        success: false,
+        message: `Category must be one of: ${GALLERY_CATEGORIES.join(", ")}`,
+      });
+    }
+
+    const data = {};
+
+    if (title !== undefined)
+      data.title = title.trim();
+
+    if (description !== undefined)
+      data.description = description.trim() || null;
+
+    if (category !== undefined)
+      data.category = category;
+
+    if (req.file) {
+      const filePath = path.resolve(req.file.path);
+
+      uploadedImage = await cloudinary.uploader.upload(filePath, {
+        folder: "aicda/gallery",
+        resource_type: "image",
+      });
+
+      data.imageUrl = uploadedImage.secure_url;
+      data.publicId = uploadedImage.public_id;
+    }
+
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Nothing to update",
+      });
+    }
+
+    const updatedGallery = await prisma.gallery.update({
+      where: {
+        id: req.params.id,
+      },
+      data,
+    });
+
+    if (uploadedImage) {
+      await cloudinary.uploader
+        .destroy(gallery.publicId)
+        .catch(() => {});
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Gallery updated successfully",
       gallery: updatedGallery,
     });
   } catch (error) {
-    if (uploadResult?.public_id) {
-      await cloudinary.uploader.destroy(uploadResult.public_id).catch(() => {});
+    if (uploadedImage?.public_id) {
+      await cloudinary.uploader.destroy(uploadedImage.public_id).catch(() => {});
     }
-    console.error("Update Gallery Error:", error);
-    return res.status(500).json({ success: false, message: error.message || "Unable to update image" });
+
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Unable to update image",
+    });
   } finally {
     if (req.file?.path) {
       await fs.remove(req.file.path).catch(() => {});
@@ -160,22 +237,42 @@ export const updateGalleryImage = async (req, res) => {
   }
 };
 
+// ==========================
+// Delete Image
+// ==========================
 export const deleteGalleryImage = async (req, res) => {
   try {
-    const gallery = await prisma.gallery.findUnique({ where: { id: req.params.id } });
+    const gallery = await prisma.gallery.findUnique({
+      where: {
+        id: req.params.id,
+      },
+    });
+
     if (!gallery) {
-      return res.status(404).json({ success: false, message: "Gallery image not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Gallery image not found",
+      });
     }
 
     await cloudinary.uploader.destroy(gallery.publicId);
-    await prisma.gallery.delete({ where: { id: gallery.id } });
+
+    await prisma.gallery.delete({
+      where: {
+        id: req.params.id,
+      },
+    });
 
     return res.status(200).json({
       success: true,
       message: "Gallery image deleted successfully",
     });
   } catch (error) {
-    console.error("Delete Gallery Error:", error);
-    return res.status(500).json({ success: false, message: error.message || "Unable to delete image" });
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Unable to delete image",
+    });
   }
 };
