@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git rm *)",
+      "Bash(npx prisma *)",
+      "PowerShell(Get-Process node -ErrorAction SilentlyContinue)"
+    ]
+  }
+}

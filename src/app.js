@@ -28,6 +28,13 @@ app.use(express.urlencoded({ extended: true }));
 // Cookie Parser
 app.use(cookieParser());
 
+app.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "AICDA Backend API is running",
+  });
+});
+
 // Routes
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/admin", adminRoutes);
