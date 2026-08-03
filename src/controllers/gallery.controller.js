@@ -1,7 +1,5 @@
-import cloudinary from "../config/cloudinary.js";
+import cloudinary, { uploadBufferToCloudinary } from "../config/cloudinary.js";
 import prisma from "../config/prisma.js";
-import fs from "fs-extra";
-import path from "path";
 
 const GALLERY_CATEGORIES = [
   "ASSOCIATION",
@@ -34,9 +32,7 @@ export const uploadImage = async (req, res) => {
       });
     }
 
-    const filePath = path.resolve(req.file.path);
-
-    uploadedImage = await cloudinary.uploader.upload(filePath, {
+    uploadedImage = await uploadBufferToCloudinary(req.file.buffer, {
       folder: "aicda/gallery",
       resource_type: "image",
     });
@@ -67,10 +63,6 @@ export const uploadImage = async (req, res) => {
       success: false,
       message: error.message || "Unable to upload image",
     });
-  } finally {
-    if (req.file?.path) {
-      await fs.remove(req.file.path).catch(() => {});
-    }
   }
 };
 
@@ -183,9 +175,7 @@ export const updateGalleryImage = async (req, res) => {
       data.category = category;
 
     if (req.file) {
-      const filePath = path.resolve(req.file.path);
-
-      uploadedImage = await cloudinary.uploader.upload(filePath, {
+      uploadedImage = await uploadBufferToCloudinary(req.file.buffer, {
         folder: "aicda/gallery",
         resource_type: "image",
       });
@@ -230,10 +220,6 @@ export const updateGalleryImage = async (req, res) => {
       success: false,
       message: error.message || "Unable to update image",
     });
-  } finally {
-    if (req.file?.path) {
-      await fs.remove(req.file.path).catch(() => {});
-    }
   }
 };
 
