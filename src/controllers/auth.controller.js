@@ -89,3 +89,66 @@ export const getMe = async (req, res) => {
     admin: req.admin,
   });
 };
+
+export const changePassword = async (req, res) => {
+  try {
+    const { email, newPassword, confirmPassword } = req.body || {};
+
+    if (!newPassword || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password and confirm password are required",
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 6 characters long",
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password and confirm password do not match",
+      });
+    }
+
+    let targetAdminId = req.admin.id;
+
+    if (email && email.trim().toLowerCase() !== req.admin.email.toLowerCase()) {
+      const targetAdmin = await prisma.admin.findUnique({
+        where: { email: email.trim() },
+      });
+
+      if (!targetAdmin) {
+        return res.status(404).json({
+          success: false,
+          message: "No admin account found with that email",
+        });
+      }
+
+      targetAdminId = targetAdmin.id;
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.admin.update({
+      where: { id: targetAdminId },
+      data: { password: hashedPassword },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Password updated successfully",
+    });
+  } catch (error) {
+    console.error("Change Password Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal Server Error",
+    });
+  }
+};

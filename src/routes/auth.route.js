@@ -3,8 +3,10 @@ import {
   login,
   logOut,
   getMe,
+  changePassword,
 } from "../controllers/auth.controller.js";
 import { isAuthenticated } from "../middlewares/auth.middleware.js";
+import { authorizeRoles } from "../middlewares/admin.middleware.js";
 
 console.log("Auth Route File Loaded");
 
@@ -18,5 +20,12 @@ router.post("/login", login);
 router.post("/logout", isAuthenticated, logOut);
 
 router.get("/me", isAuthenticated, getMe);
+
+router.post(
+  "/change-password",
+  isAuthenticated,
+  authorizeRoles("SUPER_ADMIN"),
+  changePassword
+);
 
 export default router;

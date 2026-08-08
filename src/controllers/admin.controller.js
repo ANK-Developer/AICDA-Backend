@@ -16,7 +16,7 @@ const adminSelect = {
 
 const findAdmin = (id) =>
   prisma.admin.findFirst({
-    where: { id, role: "ADMIN" },
+    where: { id, role: "SUPER_ADMIN" },
     select: adminSelect,
   });
 
@@ -64,7 +64,7 @@ export const createAdmin = async (req, res) => {
         email,
         phone,
         password: hashedPassword,
-        role: "ADMIN",
+        role: "SUPER_ADMIN",
         createdById: req.admin.id,
       },
       select: adminSelect,
@@ -88,7 +88,7 @@ export const createAdmin = async (req, res) => {
 export const getAllAdmins = async (req, res) => {
   try {
     const admins = await prisma.admin.findMany({
-      where: { role: "ADMIN" },
+      where: { role: "SUPER_ADMIN", id: { not: req.admin.id } },
       select: adminSelect,
       orderBy: { createdAt: "desc" },
     });

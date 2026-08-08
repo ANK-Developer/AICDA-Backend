@@ -6,6 +6,8 @@ import dotenv from "dotenv";
 import galleryRoutes from "./routes/gallery.routes.js";
 import authRoutes from "./routes/auth.route.js";
 import adminRoutes from "./routes/admin.route.js";
+import memberRoutes from "./routes/member.route.js";
+import enquiryRoutes from "./routes/enquiry.route.js";
 
 dotenv.config();
 
@@ -20,7 +22,7 @@ app.use(
       process.env.Frontend_URL,
     ],
     credentials: true,
-    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
@@ -43,5 +45,7 @@ app.get("/", (req, res) => {
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/gallery", galleryRoutes);
+app.use("/api/v1/members", memberRoutes);
+app.use("/api/v1/enquiries", enquiryRoutes);
 
 export default app;
