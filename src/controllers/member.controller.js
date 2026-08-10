@@ -41,6 +41,13 @@ export const getMemberById = async (req, res, next) => {
   try {
     const member = await memberService.getMemberById(req.params.id);
 
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: "Member not found",
+      });
+    }
+
     res.status(200).json({
       success: true,
       data: member,

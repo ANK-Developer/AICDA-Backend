@@ -3,7 +3,7 @@ import { getEnquiries, removeEnquiry, submitEnquiry } from "../controllers/enqui
 import { validate } from "../middlewares/validate.js";
 import { enquiryValidation } from "../validation/enquiry.validation.js";
 import { isAuthenticated } from "../middlewares/auth.middleware.js";
-import { authorizeRoles } from "../middlewares/admin.middleware.js";
+import { authorizeRoles } from "../middlewares/superAdmin.middlewares.js";
 
 const router = express.Router();
 

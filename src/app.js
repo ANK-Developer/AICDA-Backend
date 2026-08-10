@@ -4,10 +4,10 @@ import cors from "cors";
 import dotenv from "dotenv";
 
 import galleryRoutes from "./routes/gallery.routes.js";
-import authRoutes from "./routes/auth.route.js";
-import adminRoutes from "./routes/admin.route.js";
 import memberRoutes from "./routes/member.route.js";
 import enquiryRoutes from "./routes/enquiry.route.js";
+import authRoutes from "./routes/auth.route.js";
+import superAdminRoutes from "./routes/superAdmin.routs.js";
 
 dotenv.config();
 
@@ -43,9 +43,19 @@ app.get("/", (req, res) => {
 
 // Routes
 app.use("/api/v1/auth", authRoutes);
-app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/gallery", galleryRoutes);
 app.use("/api/v1/members", memberRoutes);
 app.use("/api/v1/enquiries", enquiryRoutes);
+app.use("/api/v1/super-admin", superAdminRoutes);
+
+// Fallback JSON error handler (e.g. errors passed via next(error) from member routes)
+app.use((error, req, res, next) => {
+  console.error(error);
+
+  res.status(error.status || 500).json({
+    success: false,
+    message: error.message || "Internal Server Error",
+  });
+});
 
 export default app;

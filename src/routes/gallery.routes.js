@@ -1,5 +1,5 @@
 import express from "express";
-import upload from "../middlewares/upload.middleware.js";
+import { uploadGalleryMedia } from "../middlewares/upload.middleware.js";
 import {
   uploadImage,
   getGalleryImages,
@@ -10,13 +10,13 @@ import {
 
 const router = express.Router();
 
-router.post("/upload", upload.single("image"), uploadImage);
+router.post("/upload", uploadGalleryMedia.single("image"), uploadImage);
 
 router.get("/", getGalleryImages);
 
 router.get("/:id", getSingleGalleryImage);
 
-router.patch("/:id", upload.single("image"), updateGalleryImage);
+router.patch("/:id", uploadGalleryMedia.single("image"), updateGalleryImage);
 
 router.delete("/:id", deleteGalleryImage);
 

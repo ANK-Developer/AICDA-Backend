@@ -9,6 +9,8 @@ const GALLERY_CATEGORIES = [
   "LETTER",
 ];
 
+const getResourceType = (mimetype) => (mimetype.startsWith("video/") ? "video" : "image");
+
 // ==========================
 // Upload Image
 // ==========================
@@ -32,9 +34,11 @@ export const uploadImage = async (req, res) => {
       });
     }
 
+    const resourceType = getResourceType(req.file.mimetype);
+
     uploadedImage = await uploadBufferToCloudinary(req.file.buffer, {
       folder: "aicda/gallery",
-      resource_type: "image",
+      resource_type: resourceType,
     });
 
     const gallery = await prisma.gallery.create({
@@ -44,24 +48,27 @@ export const uploadImage = async (req, res) => {
         category,
         imageUrl: uploadedImage.secure_url,
         publicId: uploadedImage.public_id,
+        resourceType: resourceType.toUpperCase(),
       },
     });
 
     return res.status(201).json({
       success: true,
-      message: "Image uploaded successfully",
+      message: "Gallery item uploaded successfully",
       gallery,
     });
   } catch (error) {
     if (uploadedImage?.public_id) {
-      await cloudinary.uploader.destroy(uploadedImage.public_id).catch(() => {});
+      await cloudinary.uploader
+        .destroy(uploadedImage.public_id, { resource_type: uploadedImage.resource_type })
+        .catch(() => {});
     }
 
     console.error(error);
 
     return res.status(500).json({
       success: false,
-      message: error.message || "Unable to upload image",
+      message: error.message || "Unable to upload gallery item",
     });
   }
 };
@@ -175,13 +182,16 @@ export const updateGalleryImage = async (req, res) => {
       data.category = category;
 
     if (req.file) {
+      const resourceType = getResourceType(req.file.mimetype);
+
       uploadedImage = await uploadBufferToCloudinary(req.file.buffer, {
         folder: "aicda/gallery",
-        resource_type: "image",
+        resource_type: resourceType,
       });
 
       data.imageUrl = uploadedImage.secure_url;
       data.publicId = uploadedImage.public_id;
+      data.resourceType = resourceType.toUpperCase();
     }
 
     if (Object.keys(data).length === 0) {
@@ -200,25 +210,27 @@ export const updateGalleryImage = async (req, res) => {
 
     if (uploadedImage) {
       await cloudinary.uploader
-        .destroy(gallery.publicId)
+        .destroy(gallery.publicId, { resource_type: gallery.resourceType.toLowerCase() })
         .catch(() => {});
     }
 
     return res.status(200).json({
       success: true,
-      message: "Gallery updated successfully",
+      message: "Gallery item updated successfully",
       gallery: updatedGallery,
     });
   } catch (error) {
     if (uploadedImage?.public_id) {
-      await cloudinary.uploader.destroy(uploadedImage.public_id).catch(() => {});
+      await cloudinary.uploader
+        .destroy(uploadedImage.public_id, { resource_type: uploadedImage.resource_type })
+        .catch(() => {});
     }
 
     console.error(error);
 
     return res.status(500).json({
       success: false,
-      message: error.message || "Unable to update image",
+      message: error.message || "Unable to update gallery item",
     });
   }
 };
@@ -241,7 +253,9 @@ export const deleteGalleryImage = async (req, res) => {
       });
     }
 
-    await cloudinary.uploader.destroy(gallery.publicId);
+    await cloudinary.uploader.destroy(gallery.publicId, {
+      resource_type: gallery.resourceType.toLowerCase(),
+    });
 
     await prisma.gallery.delete({
       where: {
@@ -251,14 +265,14 @@ export const deleteGalleryImage = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Gallery image deleted successfully",
+      message: "Gallery item deleted successfully",
     });
   } catch (error) {
     console.error(error);
 
     return res.status(500).json({
       success: false,
-      message: error.message || "Unable to delete image",
+      message: error.message || "Unable to delete gallery item",
     });
   }
 };

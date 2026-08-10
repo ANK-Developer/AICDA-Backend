@@ -10,7 +10,6 @@ datasource db {
 
 enum Role {
   SUPER_ADMIN
-  ADMIN
 }
 
 enum GalleryCategory {
@@ -19,6 +18,11 @@ enum GalleryCategory {
   IMAGE
   DIRECTORY
   LETTER
+}
+
+enum GalleryResourceType {
+  IMAGE
+  VIDEO
 }
 
 model Admin {
@@ -32,7 +36,7 @@ model Admin {
 
   password String
 
-  role     Role    @default(ADMIN)
+  role     Role    @default(SUPER_ADMIN)
   isActive Boolean @default(true)
 
   createdById String?
@@ -45,19 +49,20 @@ model Admin {
 }
 
 model Gallery {
-  id          String          @id @default(cuid())
-  title       String
-  description String?
-  imageUrl    String
-  publicId    String
-  category    GalleryCategory
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id           String              @id @default(cuid())
+  title        String
+  description  String?
+  imageUrl     String
+  publicId     String
+  category     GalleryCategory
+  resourceType GalleryResourceType @default(IMAGE)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
 }
 model Member {
   id Int @id @default(autoincrement())
 
-  memberId             String  @unique
+  memberId             Int  @unique
   memberName           String
   fatherName           String?
   photo                String?
@@ -71,6 +76,8 @@ model Member {
   companyTelephone     String?
   packetNo             String?
   dateOfJoining        DateTime?
+  validityFrom         DateTime?
+  validityTo           DateTime?
   aadharNo             String?
   stateId              Int?
   cityId               Int?
@@ -85,7 +92,7 @@ model Member {
 
 model State {
   id        Int      @id @default(autoincrement())
-  stateName String
+  stateName String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

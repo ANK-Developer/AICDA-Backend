@@ -3,7 +3,8 @@
     "allow": [
       "Bash(git rm *)",
       "Bash(npx prisma *)",
-      "PowerShell(Get-Process node -ErrorAction SilentlyContinue)"
+      "PowerShell(Get-Process node -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-CimInstance Win32_Process -Filter \"ProcessId=23816\")"
     ]
   }
 }

@@ -1,39 +1,54 @@
 import jwt from "jsonwebtoken";
 import prisma from "../config/prisma.js";
-export const isAuthenticated=async(req,res,next)=>{
-    try{
-        const token=req.cookies.token;
-         if (!token) {
+
+export const isAuthenticated = async (req, res, next) => {
+  try {
+    const token = req.cookies?.token;
+
+    if (!token) {
       return res.status(401).json({
         success: false,
-        message: "Please login first",
+        message: "Authentication required",
       });
     }
-    const decoded=jwt.verify(token,process.env.JWT_SECRET);
-    const admin=await prisma.admin.findUnique({
-        where:{
-            id:decoded.id,
-        },
-    })
-     if (!admin) {
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    const admin = await prisma.admin.findUnique({
+      where: { id: decoded.id },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        role: true,
+        isActive: true,
+      },
+    });
+
+    if (!admin) {
       return res.status(401).json({
         success: false,
-        message: "Admin not found",
+        message: "Admin account no longer exists",
       });
     }
+
     if (!admin.isActive) {
       return res.status(403).json({
         success: false,
         message: "Your account has been deactivated",
       });
     }
-      req.admin = admin;
-      next();
-    }
-    catch(error){
-           return res.status(401).json({
+
+    req.admin = admin;
+
+    next();
+  } catch (error) {
+    console.error("Authentication error:", error);
+    return res.status(401).json({
       success: false,
       message: "Invalid or expired token",
     });
-    }
-}
+  }
+};

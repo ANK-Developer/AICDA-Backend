@@ -2,24 +2,54 @@ import bcrypt from "bcrypt";
 import prisma from "../config/prisma.js";
 import generateToken from "../utils/generateToken.js";
 
+// =====================================
+// LOGIN
+// POST /api/v1/auth/login
+// =====================================
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body || {};
 
+    console.log("LOGIN EMAIL:", email);
+
     if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message: "Email and Password are required",
+        message: "Email and password are required",
       });
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
+
     const admin = await prisma.admin.findUnique({
       where: {
-        email,
+        email: normalizedEmail,
       },
     });
 
+    console.log("ADMIN FOUND:", !!admin);
+
     if (!admin) {
+      console.log("ADMIN NOT FOUND");
+
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password",
+      });
+    }
+
+    console.log("DATABASE EMAIL:", admin.email);
+    console.log("DATABASE ROLE:", admin.role);
+    console.log("DATABASE ACTIVE:", admin.isActive);
+
+    const passwordMatch = await bcrypt.compare(
+      password,
+      admin.password
+    );
+
+    console.log("PASSWORD MATCH:", passwordMatch);
+
+    if (!passwordMatch) {
       return res.status(401).json({
         success: false,
         message: "Invalid email or password",
@@ -33,12 +63,11 @@ export const login = async (req, res) => {
       });
     }
 
-    const isMatch = await bcrypt.compare(password, admin.password);
-
-    if (!isMatch) {
-      return res.status(401).json({
+    // Only SUPER_ADMIN can access this panel
+    if (admin.role !== "SUPER_ADMIN") {
+      return res.status(403).json({
         success: false,
-        message: "Invalid email or password",
+        message: "Only Super Admin can access this panel",
       });
     }
 
@@ -65,24 +94,45 @@ export const login = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Login Error:", error);
+    console.error("Login error:", error);
 
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: "Internal server error",
     });
   }
 };
 
-export const logOut = async (req, res) => {
-  res.clearCookie("token");
+// =====================================
+// LOGOUT
+// POST /api/v1/auth/logout
+// =====================================
+export const logout = async (req, res) => {
+  try {
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+    });
 
-  return res.status(200).json({
-    success: true,
-    message: "Logged out successfully",
-  });
+    return res.status(200).json({
+      success: true,
+      message: "Logged out successfully",
+    });
+  } catch (error) {
+    console.error("Logout error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
 };
 
+// =====================================
+// GET CURRENT ADMIN
+// GET /api/v1/auth/me
+// =====================================
 export const getMe = async (req, res) => {
   return res.status(200).json({
     success: true,
@@ -90,53 +140,50 @@ export const getMe = async (req, res) => {
   });
 };
 
+// =====================================
+// CHANGE OWN PASSWORD
+// POST /api/v1/auth/change-password
+// =====================================
 export const changePassword = async (req, res) => {
   try {
-    const { email, newPassword, confirmPassword } = req.body || {};
+    const { newPassword, confirmPassword } = req.body || {};
 
     if (!newPassword || !confirmPassword) {
       return res.status(400).json({
         success: false,
-        message: "New password and confirm password are required",
+        message:
+          "New password and confirm password are required",
       });
     }
 
     if (newPassword.length < 6) {
       return res.status(400).json({
         success: false,
-        message: "New password must be at least 6 characters long",
+        message:
+          "New password must be at least 6 characters long",
       });
     }
 
     if (newPassword !== confirmPassword) {
       return res.status(400).json({
         success: false,
-        message: "New password and confirm password do not match",
+        message:
+          "New password and confirm password do not match",
       });
     }
 
-    let targetAdminId = req.admin.id;
-
-    if (email && email.trim().toLowerCase() !== req.admin.email.toLowerCase()) {
-      const targetAdmin = await prisma.admin.findUnique({
-        where: { email: email.trim() },
-      });
-
-      if (!targetAdmin) {
-        return res.status(404).json({
-          success: false,
-          message: "No admin account found with that email",
-        });
-      }
-
-      targetAdminId = targetAdmin.id;
-    }
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const hashedPassword = await bcrypt.hash(
+      newPassword,
+      10
+    );
 
     await prisma.admin.update({
-      where: { id: targetAdminId },
-      data: { password: hashedPassword },
+      where: {
+        id: req.admin.id,
+      },
+      data: {
+        password: hashedPassword,
+      },
     });
 
     return res.status(200).json({
@@ -144,11 +191,11 @@ export const changePassword = async (req, res) => {
       message: "Password updated successfully",
     });
   } catch (error) {
-    console.error("Change Password Error:", error);
+    console.error("Change password error:", error);
 
     return res.status(500).json({
       success: false,
-      message: error.message || "Internal Server Error",
+      message: "Internal server error",
     });
   }
 };

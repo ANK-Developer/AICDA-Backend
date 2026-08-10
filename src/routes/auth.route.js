@@ -1,30 +1,27 @@
 import express from "express";
+
 import {
   login,
-  logOut,
+  logout,
   getMe,
   changePassword,
 } from "../controllers/auth.controller.js";
-import { isAuthenticated } from "../middlewares/auth.middleware.js";
-import { authorizeRoles } from "../middlewares/admin.middleware.js";
 
-console.log("Auth Route File Loaded");
+import { isAuthenticated } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
-router.get("/test", (req, res) => {
-  res.send("Auth Route Working");
-});
-console.log("Loading Auth Routes...");
+
+// Public
 router.post("/login", login);
 
-router.post("/logout", isAuthenticated, logOut);
+// Protected
+router.post("/logout", isAuthenticated, logout);
 
 router.get("/me", isAuthenticated, getMe);
 
 router.post(
   "/change-password",
   isAuthenticated,
-  authorizeRoles("SUPER_ADMIN"),
   changePassword
 );
 
