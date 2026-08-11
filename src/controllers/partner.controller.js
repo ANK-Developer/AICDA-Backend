@@ -1,8 +1,4 @@
-import prisma from "../config/prisma.js";
-
-import {
-  createPartner as createPartnerService,
-} from "../services/partner.service.js";
+import * as partnerService from "../services/partner.service.js";
 
 
 // ======================================================
@@ -10,19 +6,23 @@ import {
 // POST /api/v1/partners
 // ======================================================
 
-export const createPartner = async (req, res) => {
+export const createPartner = async (req, res, next) => {
   try {
-    const partner = await createPartnerService(req.body);
+    const photo = req.file
+      ? await partnerService.uploadPartnerPhoto(req.file)
+      : null;
+
+    const partner = await partnerService.createPartner({
+      ...req.body,
+      photo,
+    });
 
     return res.status(201).json({
       success: true,
       message: "Partner created successfully",
       data: partner,
     });
-
   } catch (error) {
-    console.error("Create Partner Error:", error);
-
     if (error.message === "Member not found") {
       return res.status(404).json({
         success: false,
@@ -30,11 +30,7 @@ export const createPartner = async (req, res) => {
       });
     }
 
-    return res.status(500).json({
-      success: false,
-      message: "Failed to create partner",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
@@ -44,50 +40,26 @@ export const createPartner = async (req, res) => {
 // GET /api/v1/partners/:partnerId
 // ======================================================
 
-export const getPartnerById = async (req, res) => {
+export const getPartnerById = async (req, res, next) => {
   try {
     const { partnerId } = req.params;
 
-    const partner = await prisma.partner.findUnique({
-      where: {
-        partnerId: partnerId,
-      },
-
-      include: {
-        member: {
-          select: {
-            id: true,
-            memberId: true,
-            memberName: true,
-          },
-        },
-
-        state: true,
-        city: true,
-      },
-    });
-
-    if (!partner) {
-      return res.status(404).json({
-        success: false,
-        message: "Partner not found",
-      });
-    }
+    const partner = await partnerService.getPartnerById(partnerId);
 
     return res.status(200).json({
       success: true,
       message: "Partner fetched successfully",
       data: partner,
     });
-
   } catch (error) {
-    console.error("Get Partner Error:", error);
+    if (error.message === "Partner not found") {
+      return res.status(404).json({
+        success: false,
+        message: "Partner not found",
+      });
+    }
 
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch partner",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
@@ -95,42 +67,117 @@ export const getPartnerById = async (req, res) => {
 // ======================================================
 // GET ALL PARTNERS
 // GET /api/v1/partners
+//
+// Query: search, status, stateId, cityId, memberId,
+//        page, limit, sortBy, order
 // ======================================================
 
-export const getAllPartners = async (req, res) => {
+export const getAllPartners = async (req, res, next) => {
   try {
-    const partners = await prisma.partner.findMany({
-      include: {
-        member: {
-          select: {
-            id: true,
-            memberId: true,
-            memberName: true,
-          },
-        },
+    const { partners, pagination } = await partnerService.getAllPartners(
+      req.query
+    );
 
-        state: true,
-        city: true,
-      },
-
-      orderBy: {
-        createdAt: "desc",
-      },
+    return res.status(200).json({
+      success: true,
+      count: partners.length,
+      pagination,
+      data: partners,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+// ======================================================
+// GET PARTNERS BY MEMBER
+// GET /api/v1/partners/member/:memberId
+// ======================================================
+
+export const getPartnersByMember = async (req, res, next) => {
+  try {
+    const { memberId } = req.params;
+
+    const partners = await partnerService.getPartnersByMember(memberId);
 
     return res.status(200).json({
       success: true,
       count: partners.length,
       data: partners,
     });
-
   } catch (error) {
-    console.error("Get All Partners Error:", error);
+    if (error.message === "Member not found") {
+      return res.status(404).json({
+        success: false,
+        message: "Member not found",
+      });
+    }
 
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch partners",
-      error: error.message,
+    next(error);
+  }
+};
+
+
+// ======================================================
+// UPDATE PARTNER
+// PATCH /api/v1/partners/:partnerId
+// ======================================================
+
+export const updatePartner = async (req, res, next) => {
+  try {
+    const { partnerId } = req.params;
+
+    const photo = req.file
+      ? await partnerService.uploadPartnerPhoto(req.file)
+      : undefined;
+
+    const partner = await partnerService.updatePartner(partnerId, {
+      ...req.body,
+      ...(photo !== undefined && { photo }),
     });
+
+    return res.status(200).json({
+      success: true,
+      message: "Partner updated successfully",
+      data: partner,
+    });
+  } catch (error) {
+    if (error.message === "Partner not found") {
+      return res.status(404).json({
+        success: false,
+        message: "Partner not found",
+      });
+    }
+
+    next(error);
+  }
+};
+
+
+// ======================================================
+// DELETE PARTNER
+// DELETE /api/v1/partners/:partnerId
+// ======================================================
+
+export const deletePartner = async (req, res, next) => {
+  try {
+    const { partnerId } = req.params;
+
+    await partnerService.deletePartner(partnerId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Partner deleted successfully",
+    });
+  } catch (error) {
+    if (error.message === "Partner not found") {
+      return res.status(404).json({
+        success: false,
+        message: "Partner not found",
+      });
+    }
+
+    next(error);
   }
 };

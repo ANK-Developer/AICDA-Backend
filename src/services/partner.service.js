@@ -1,4 +1,30 @@
 import prisma from "../config/prisma.js";
+import { uploadBufferToCloudinary } from "../config/cloudinary.js";
+import { resolveLocationIds } from "../utils/location.js";
+
+export const uploadPartnerPhoto = async (file) => {
+  if (!file) return null;
+  const uploaded = await uploadBufferToCloudinary(file.buffer, {
+    folder: "aicda/partners",
+    resource_type: "image",
+  });
+  return uploaded.secure_url;
+};
+
+
+// Admin UIs act on the numeric primary key (like the member module does),
+// but the generated "123A" partnerId is also a valid, unique lookup — so
+// routes accept either without the caller needing to know which one it is.
+const findPartnerRecord = (identifier, extra = {}) => {
+  const isNumericId = /^\d+$/.test(String(identifier));
+
+  return prisma.partner.findFirst({
+    where: isNumericId
+      ? { id: Number(identifier) }
+      : { partnerId: identifier },
+    ...extra,
+  });
+};
 
 
 // ======================================================
@@ -8,8 +34,8 @@ import prisma from "../config/prisma.js";
 // 123 → 123C
 // ======================================================
 
-export const generatePartnerId = async (memberId) => {
-  const member = await prisma.member.findUnique({
+export const generatePartnerId = async (memberId, tx = prisma) => {
+  const member = await tx.member.findUnique({
     where: {
       memberId: Number(memberId),
     },
@@ -19,7 +45,7 @@ export const generatePartnerId = async (memberId) => {
     throw new Error("Member not found");
   }
 
-  const lastPartner = await prisma.partner.findFirst({
+  const lastPartner = await tx.partner.findFirst({
     where: {
       memberId: member.id,
     },
@@ -48,6 +74,13 @@ export const generatePartnerId = async (memberId) => {
 // CREATE PARTNER
 // ======================================================
 
+// Two admins creating partners for the same member at the same instant can
+// both read the same "last partner number" before either write commits.
+// Retrying inside the unique-constraint catch (rather than locking) keeps
+// this cheap while still guaranteeing no two partners collide on
+// [memberId, partnerNumber].
+const MAX_PARTNER_ID_ATTEMPTS = 5;
+
 export const createPartner = async (data) => {
   const {
     memberId,
@@ -68,8 +101,8 @@ export const createPartner = async (data) => {
     companyTelephone,
     packetNo,
 
-    stateId,
-    cityId,
+    state,
+    city,
 
     dateOfJoining,
 
@@ -77,93 +110,105 @@ export const createPartner = async (data) => {
     validityTo,
   } = data;
 
+  // Partner's own state/city if given, otherwise fall back to the Member's.
+  const locationGiven = state !== undefined || city !== undefined;
+  const resolvedLocation = locationGiven
+    ? await resolveLocationIds(state, city)
+    : null;
 
-  // ----------------------------------------------------
-  // Find Member + Generate Partner ID
-  // ----------------------------------------------------
+  let attempt = 0;
 
-  const {
-    member,
-    partnerId,
-    partnerNumber,
-  } = await generatePartnerId(memberId);
+  while (true) {
+    attempt += 1;
 
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const {
+          member,
+          partnerId,
+          partnerNumber,
+        } = await generatePartnerId(memberId, tx);
 
-  // ----------------------------------------------------
-  // Create Partner
-  // ----------------------------------------------------
+        return tx.partner.create({
+          data: {
+            // Automatically generated
+            partnerId,
+            partnerNumber,
 
-  const partner = await prisma.partner.create({
-    data: {
+            // Relationship
+            memberId: member.id,
 
-      // Automatically generated
-      partnerId,
-      partnerNumber,
+            // Partner information
+            partnerName,
+            fatherName,
+            photo,
+            residentialAddress,
+            mobile,
+            residentialTelephone,
 
-      // Relationship
-      memberId: member.id,
+            panCardNo,
+            aadharNo,
+            designation,
 
-      // Partner information
-      partnerName,
-      fatherName,
-      photo,
-      residentialAddress,
-      mobile,
-      residentialTelephone,
+            // ------------------------------------------------
+            // Common fields
+            //
+            // If frontend sends a value → use it.
+            // Otherwise → copy Member value.
+            // ------------------------------------------------
 
-      panCardNo,
-      aadharNo,
-      designation,
+            companyName:
+              companyName ?? member.companyName,
 
-      // ------------------------------------------------
-      // Common fields
-      //
-      // If frontend sends a value → use it.
-      // Otherwise → copy Member value.
-      // ------------------------------------------------
+            companyAddress:
+              companyAddress ?? member.companyAddress,
 
-      companyName:
-        companyName ?? member.companyName,
+            companyTelephone:
+              companyTelephone ??
+              member.companyTelephone,
 
-      companyAddress:
-        companyAddress ?? member.companyAddress,
+            packetNo:
+              packetNo ?? member.packetNo,
 
-      companyTelephone:
-        companyTelephone ??
-        member.companyTelephone,
+            stateId: locationGiven
+              ? resolvedLocation.stateId
+              : member.stateId,
 
-      packetNo:
-        packetNo ?? member.packetNo,
+            cityId: locationGiven
+              ? resolvedLocation.cityId
+              : member.cityId,
 
-      stateId:
-        stateId ?? member.stateId,
+            // ------------------------------------------------
+            // Dates
+            // ------------------------------------------------
 
-      cityId:
-        cityId ?? member.cityId,
+            dateOfJoining: dateOfJoining
+              ? new Date(dateOfJoining)
+              : null,
 
-      // ------------------------------------------------
-      // Dates
-      // ------------------------------------------------
+            validityFrom: validityFrom
+              ? new Date(validityFrom)
+              : null,
 
-      dateOfJoining: dateOfJoining
-        ? new Date(dateOfJoining)
-        : null,
+            validityTo: validityTo
+              ? new Date(validityTo)
+              : null,
 
-      validityFrom: validityFrom
-        ? new Date(validityFrom)
-        : null,
+            // Backend controls this
+            isActive: true,
+          },
+        });
+      });
+    } catch (error) {
+      // P2002 = unique constraint violation (partnerId or [memberId, partnerNumber])
+      const isCollision = error.code === "P2002";
 
-      validityTo: validityTo
-        ? new Date(validityTo)
-        : null,
-
-      // Backend controls this
-      isActive: true,
-    },
-  });
-
-
-  return partner;
+      if (!isCollision || attempt >= MAX_PARTNER_ID_ATTEMPTS) {
+        throw error;
+      }
+      // Another request grabbed the same partner number first — retry with a fresh one.
+    }
+  }
 };
 
 
@@ -171,12 +216,10 @@ export const createPartner = async (data) => {
 // GET PARTNER BY ID
 // ======================================================
 
-export const getPartnerById = async (partnerId) => {
-  const partner = await prisma.partner.findUnique({
-    where: {
-      partnerId,
-    },
+export const getPartnerById = async (identifier) => {
+  await syncPartnerActiveStatus();
 
+  const partner = await findPartnerRecord(identifier, {
     include: {
       member: {
         select: {
@@ -202,31 +245,184 @@ export const getPartnerById = async (partnerId) => {
 
 
 // ======================================================
-// GET ALL PARTNERS
+// GET PARTNERS BY MEMBER
 // ======================================================
 
-export const getAllPartners = async () => {
-  const partners = await prisma.partner.findMany({
-    include: {
-      member: {
-        select: {
-          id: true,
-          memberId: true,
-          memberName: true,
-        },
-      },
+export const getPartnersByMember = async (memberId) => {
+  await syncPartnerActiveStatus();
 
+  const member = await prisma.member.findUnique({
+    where: {
+      memberId: Number(memberId),
+    },
+  });
+
+  if (!member) {
+    throw new Error("Member not found");
+  }
+
+  return prisma.partner.findMany({
+    where: {
+      memberId: member.id,
+    },
+
+    include: {
       state: true,
       city: true,
     },
 
     orderBy: {
-      createdAt: "desc",
+      partnerNumber: "asc",
     },
   });
+};
 
 
-  return partners;
+// ======================================================
+// GET ALL PARTNERS
+//
+// Supports:
+//   search   → partnerName / partnerId / mobile / panCardNo
+//   status   → "active" | "inactive"
+//   stateId, cityId, memberId → filters
+//   page, limit               → pagination
+//   sortBy, order              → sorting
+// ======================================================
+
+const SORTABLE_PARTNER_FIELDS = [
+  "createdAt",
+  "updatedAt",
+  "partnerName",
+  "partnerId",
+  "dateOfJoining",
+  "validityFrom",
+  "validityTo",
+];
+
+export const getAllPartners = async (query = {}) => {
+  await syncPartnerActiveStatus();
+
+  const {
+    search,
+    status,
+    stateId,
+    cityId,
+    memberId,
+    page = 1,
+    limit = 10,
+    sortBy = "createdAt",
+    order = "desc",
+  } = query;
+
+  const where = {};
+
+  if (search) {
+    where.OR = [
+      { partnerName: { contains: search, mode: "insensitive" } },
+      { partnerId: { contains: search, mode: "insensitive" } },
+      { mobile: { contains: search, mode: "insensitive" } },
+      { panCardNo: { contains: search, mode: "insensitive" } },
+    ];
+  }
+
+  if (status === "active") where.isActive = true;
+  if (status === "inactive") where.isActive = false;
+
+  if (stateId) where.stateId = Number(stateId);
+  if (cityId) where.cityId = Number(cityId);
+
+  if (memberId) {
+    const member = await prisma.member.findUnique({
+      where: { memberId: Number(memberId) },
+      select: { id: true },
+    });
+    // No such member → force an empty result instead of ignoring the filter.
+    where.memberId = member ? member.id : -1;
+  }
+
+  const pageNumber = Math.max(Number(page) || 1, 1);
+  const pageSize = Math.min(Math.max(Number(limit) || 10, 1), 100);
+
+  const sortField = SORTABLE_PARTNER_FIELDS.includes(sortBy)
+    ? sortBy
+    : "createdAt";
+  const sortOrder = order === "asc" ? "asc" : "desc";
+
+  const [partners, total] = await prisma.$transaction([
+    prisma.partner.findMany({
+      where,
+
+      include: {
+        member: {
+          select: {
+            id: true,
+            memberId: true,
+            memberName: true,
+          },
+        },
+
+        state: true,
+        city: true,
+      },
+
+      orderBy: {
+        [sortField]: sortOrder,
+      },
+
+      skip: (pageNumber - 1) * pageSize,
+      take: pageSize,
+    }),
+
+    prisma.partner.count({ where }),
+  ]);
+
+  return {
+    partners,
+    pagination: {
+      page: pageNumber,
+      limit: pageSize,
+      total,
+      totalPages: Math.max(Math.ceil(total / pageSize), 1),
+    },
+  };
+};
+
+
+// ======================================================
+// AUTOMATIC ACTIVE / INACTIVE SWEEP
+//
+// Validity isn't watched by a scheduler, so this runs before every
+// read and keeps isActive self-healing without a cron job.
+// ======================================================
+
+export const syncPartnerActiveStatus = async () => {
+  const now = new Date();
+
+  await prisma.$transaction([
+    // No validity window, not yet started, or expired → inactive.
+    prisma.partner.updateMany({
+      where: {
+        isActive: true,
+        OR: [
+          { validityFrom: null },
+          { validityTo: null },
+          { validityFrom: { gt: now } },
+          { validityTo: { lt: now } },
+        ],
+      },
+      data: { isActive: false },
+    }),
+
+    // Currently inside the validity window → active.
+    prisma.partner.updateMany({
+      where: {
+        isActive: false,
+        validityFrom: { lte: now },
+        validityTo: { gte: now },
+      },
+      data: { isActive: true },
+    }),
+  ]);
 };
 
 
@@ -270,7 +466,7 @@ export const getPartnerStatus = (
 // ======================================================
 
 export const updatePartner = async (
-  partnerId,
+  identifier,
   data
 ) => {
 
@@ -278,12 +474,7 @@ export const updatePartner = async (
   // Check Partner exists
   // -----------------------------------------------
 
-  const existingPartner =
-    await prisma.partner.findUnique({
-      where: {
-        partnerId,
-      },
-    });
+  const existingPartner = await findPartnerRecord(identifier);
 
 
   if (!existingPartner) {
@@ -312,14 +503,20 @@ export const updatePartner = async (
     companyTelephone,
     packetNo,
 
-    stateId,
-    cityId,
+    state,
+    city,
 
     dateOfJoining,
 
     validityFrom,
     validityTo,
   } = data;
+
+  // Only re-resolve state/city if the client actually sent one of them.
+  const locationGiven = state !== undefined || city !== undefined;
+  const { stateId, cityId } = locationGiven
+    ? await resolveLocationIds(state, city)
+    : { stateId: undefined, cityId: undefined };
 
 
   // -----------------------------------------------
@@ -330,7 +527,7 @@ export const updatePartner = async (
     await prisma.partner.update({
 
       where: {
-        partnerId,
+        id: existingPartner.id,
       },
 
       data: {
@@ -391,6 +588,14 @@ export const updatePartner = async (
     });
 
 
+  // Validity changed — recompute isActive immediately rather than waiting
+  // for the next sweep so the response reflects the true status.
+  if (validityFrom !== undefined || validityTo !== undefined) {
+    const recalculated = await updatePartnerActiveStatus(updatedPartner);
+    updatedPartner.isActive = recalculated.isActive;
+  }
+
+
   return updatedPartner;
 };
 
@@ -433,4 +638,23 @@ export const updatePartnerActiveStatus = async (
 
 
   return partner;
+};
+
+
+// ======================================================
+// DELETE PARTNER
+// ======================================================
+
+export const deletePartner = async (identifier) => {
+  const existingPartner = await findPartnerRecord(identifier);
+
+  if (!existingPartner) {
+    throw new Error("Partner not found");
+  }
+
+  await prisma.partner.delete({
+    where: {
+      id: existingPartner.id,
+    },
+  });
 };

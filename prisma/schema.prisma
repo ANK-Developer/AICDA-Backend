@@ -18,6 +18,7 @@ enum GalleryCategory {
   IMAGE
   DIRECTORY
   LETTER
+  BANNER
 }
 
 enum GalleryResourceType {

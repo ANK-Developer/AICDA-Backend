@@ -7,6 +7,7 @@ const GALLERY_CATEGORIES = [
   "IMAGE",
   "DIRECTORY",
   "LETTER",
+  "BANNER",
 ];
 
 const getResourceType = (mimetype) => (mimetype.startsWith("video/") ? "video" : "image");

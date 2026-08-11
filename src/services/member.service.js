@@ -1,5 +1,6 @@
 import prisma from "../config/prisma.js";
 import { uploadBufferToCloudinary } from "../config/cloudinary.js";
+import { resolveLocationIds } from "../utils/location.js";
 
 const uploadMemberPhoto = async (file) => {
   if (!file) return null;
@@ -8,36 +9,6 @@ const uploadMemberPhoto = async (file) => {
     resource_type: "image",
   });
   return uploaded.secure_url;
-};
-
-// Members are entered by name ("Rajasthan" / "Alwar") rather than picked
-// from a managed reference list, so we find-or-create the State/City rows
-// behind the scenes instead of requiring stateId/cityId from the client.
-const resolveLocationIds = async (stateName, cityName) => {
-  const state = (stateName || "").trim();
-  const city = (cityName || "").trim();
-
-  let stateId = null;
-  if (state) {
-    const stateRow = await prisma.state.upsert({
-      where: { stateName: state },
-      update: {},
-      create: { stateName: state },
-    });
-    stateId = stateRow.id;
-  }
-
-  let cityId = null;
-  if (city && stateId) {
-    const cityRow = await prisma.city.upsert({
-      where: { cityName_stateId: { cityName: city, stateId } },
-      update: {},
-      create: { cityName: city, stateId },
-    });
-    cityId = cityRow.id;
-  }
-
-  return { stateId, cityId };
 };
 
 export const createMember = async (req) => {

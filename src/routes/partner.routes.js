@@ -2,18 +2,22 @@ import express from "express";
 
 import {
   createPartner,
+  deletePartner,
   getAllPartners,
   getPartnerById,
+  getPartnersByMember,
   updatePartner,
 } from "../controllers/partner.controller.js";
 
 import {
   createPartnerSchema,
+  updatePartnerSchema,
 } from "../validation/partner.validation.js";
 
-import {
-  validate,
-} from "../middleware/validate.middleware.js";
+import { validate } from "../middlewares/validate.js";
+import upload from "../middlewares/upload.middleware.js";
+import { isAuthenticated } from "../middlewares/auth.middleware.js";
+import { authorizeRoles } from "../middlewares/superAdmin.middlewares.js";
 
 const router = express.Router();
 
@@ -25,6 +29,9 @@ const router = express.Router();
 
 router.post(
   "/",
+  isAuthenticated,
+  authorizeRoles("SUPER_ADMIN"),
+  upload.single("photo"),
   validate(createPartnerSchema),
   createPartner
 );
@@ -37,7 +44,25 @@ router.post(
 
 router.get(
   "/",
+  isAuthenticated,
+  authorizeRoles("SUPER_ADMIN"),
   getAllPartners
+);
+
+
+// ======================================================
+// GET PARTNERS BY MEMBER
+// GET /api/v1/partners/member/:memberId
+//
+// Registered before "/:partnerId" so "member" isn't
+// swallowed as a partner ID.
+// ======================================================
+
+router.get(
+  "/member/:memberId",
+  isAuthenticated,
+  authorizeRoles("SUPER_ADMIN"),
+  getPartnersByMember
 );
 
 
@@ -48,6 +73,8 @@ router.get(
 
 router.get(
   "/:partnerId",
+  isAuthenticated,
+  authorizeRoles("SUPER_ADMIN"),
   getPartnerById
 );
 
@@ -59,7 +86,24 @@ router.get(
 
 router.patch(
   "/:partnerId",
+  isAuthenticated,
+  authorizeRoles("SUPER_ADMIN"),
+  upload.single("photo"),
+  validate(updatePartnerSchema),
   updatePartner
+);
+
+
+// ======================================================
+// DELETE PARTNER
+// DELETE /api/v1/partners/:partnerId
+// ======================================================
+
+router.delete(
+  "/:partnerId",
+  isAuthenticated,
+  authorizeRoles("SUPER_ADMIN"),
+  deletePartner
 );
 
 
