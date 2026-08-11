@@ -3,7 +3,9 @@ export const validateMember=[
 
   body("memberId")
     .notEmpty()
-    .withMessage("Member ID is required"),
+    .withMessage("Member ID is required")
+    .isInt()
+    .withMessage("Member ID must be a number"),
 
   body("memberName")
     .notEmpty()

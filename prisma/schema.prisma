@@ -62,7 +62,7 @@ model Gallery {
 model Member {
   id Int @id @default(autoincrement())
 
-  memberId             Int  @unique
+  memberId             Int @unique
   memberName           String
   fatherName           String?
   photo                String?

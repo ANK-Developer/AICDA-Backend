@@ -19,17 +19,21 @@ const resolveLocationIds = async (stateName, cityName) => {
 
   let stateId = null;
   if (state) {
-    const stateRow =
-      (await prisma.state.findFirst({ where: { stateName: state } })) ||
-      (await prisma.state.create({ data: { stateName: state } }));
+    const stateRow = await prisma.state.upsert({
+      where: { stateName: state },
+      update: {},
+      create: { stateName: state },
+    });
     stateId = stateRow.id;
   }
 
   let cityId = null;
   if (city && stateId) {
-    const cityRow =
-      (await prisma.city.findFirst({ where: { cityName: city, stateId } })) ||
-      (await prisma.city.create({ data: { cityName: city, stateId } }));
+    const cityRow = await prisma.city.upsert({
+      where: { cityName_stateId: { cityName: city, stateId } },
+      update: {},
+      create: { cityName: city, stateId },
+    });
     cityId = cityRow.id;
   }
 
@@ -38,12 +42,14 @@ const resolveLocationIds = async (stateName, cityName) => {
 
 export const createMember = async (req) => {
   const body = req.body;
-  const photo = await uploadMemberPhoto(req.file);
-  const { stateId, cityId } = await resolveLocationIds(body.state, body.city);
+  const [photo, { stateId, cityId }] = await Promise.all([
+    uploadMemberPhoto(req.file),
+    resolveLocationIds(body.state, body.city),
+  ]);
 
   return prisma.member.create({
     data: {
-      memberId: body.memberId,
+      memberId: Number(body.memberId),
       memberName: body.memberName,
       fatherName: body.fatherName || null,
       photo,
@@ -133,14 +139,15 @@ export const updateMember = async (id, req) => {
   }
 
   const body = req.body;
-  const photo = req.file ? await uploadMemberPhoto(req.file) : undefined;
-  const { stateId, cityId } =
+  const [photo, { stateId, cityId }] = await Promise.all([
+    req.file ? uploadMemberPhoto(req.file) : Promise.resolve(undefined),
     body.state !== undefined || body.city !== undefined
-      ? await resolveLocationIds(body.state, body.city)
-      : { stateId: undefined, cityId: undefined };
+      ? resolveLocationIds(body.state, body.city)
+      : Promise.resolve({ stateId: undefined, cityId: undefined }),
+  ]);
 
   const data = {
-    memberId: body.memberId,
+    memberId: body.memberId !== undefined ? Number(body.memberId) : undefined,
     memberName: body.memberName,
     fatherName: body.fatherName,
     photo,
