@@ -72,7 +72,22 @@ export const createMember = async (req) => {
   });
 };
 
+// Membership validity isn't watched by a scheduler, so we sweep expired
+// members to inactive right before any listing is read, keeping the
+// isActive flag self-healing without needing a cron job.
+const deactivateExpiredMembers = async () => {
+  await prisma.member.updateMany({
+    where: {
+      isActive: true,
+      validityTo: { lt: new Date() },
+    },
+    data: { isActive: false },
+  });
+};
+
 export const getAllMembers = async () => {
+  await deactivateExpiredMembers();
+
   return prisma.member.findMany({
     include: {
       state: true,
@@ -85,6 +100,8 @@ export const getAllMembers = async () => {
 };
 
 export const getPublicMembers = async () => {
+  await deactivateExpiredMembers();
+
   const members = await prisma.member.findMany({
     where: { isActive: true },
     select: {

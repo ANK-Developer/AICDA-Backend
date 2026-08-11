@@ -2,6 +2,7 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import dotenv from "dotenv";
+import partnerRoutes from "./routes/partner.routes.js";
 
 import galleryRoutes from "./routes/gallery.routes.js";
 import memberRoutes from "./routes/member.route.js";
@@ -47,7 +48,10 @@ app.use("/api/v1/gallery", galleryRoutes);
 app.use("/api/v1/members", memberRoutes);
 app.use("/api/v1/enquiries", enquiryRoutes);
 app.use("/api/v1/super-admin", superAdminRoutes);
-
+app.use(
+  "/api/v1/partners",
+  partnerRoutes
+);
 // Fallback JSON error handler (e.g. errors passed via next(error) from member routes)
 app.use((error, req, res, next) => {
   console.error(error);

@@ -4,8 +4,8 @@ export const validateMember=[
   body("memberId")
     .notEmpty()
     .withMessage("Member ID is required")
-    .isInt()
-    .withMessage("Member ID must be a number"),
+    .isInt({ min: 1, max: 999999 })
+    .withMessage("Member ID must be a number up to 6 digits"),
 
   body("memberName")
     .notEmpty()
@@ -13,8 +13,8 @@ export const validateMember=[
 
   body("mobile")
     .optional()
-    .isMobilePhone("en-IN")
-    .withMessage("Invalid Mobile Number"),
+    .matches(/^[0-9]{10}$/)
+    .withMessage("Mobile number must be exactly 10 digits"),
 
   body("aadharNo")
     .optional()
