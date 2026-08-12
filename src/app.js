@@ -9,6 +9,7 @@ import memberRoutes from "./routes/member.route.js";
 import enquiryRoutes from "./routes/enquiry.route.js";
 import authRoutes from "./routes/auth.route.js";
 import superAdminRoutes from "./routes/superAdmin.routs.js";
+import locationRoutes from "./routes/location.routes.js";
 
 dotenv.config();
 
@@ -48,6 +49,7 @@ app.use("/api/v1/gallery", galleryRoutes);
 app.use("/api/v1/members", memberRoutes);
 app.use("/api/v1/enquiries", enquiryRoutes);
 app.use("/api/v1/super-admin", superAdminRoutes);
+app.use("/api/v1/locations", locationRoutes);
 app.use(
   "/api/v1/partners",
   partnerRoutes

@@ -1,6 +1,7 @@
 import prisma from "../config/prisma.js";
 import { uploadBufferToCloudinary } from "../config/cloudinary.js";
 import { resolveLocationIds } from "../utils/location.js";
+import { nextValidityFrom } from "../utils/validity.js";
 
 export const uploadPartnerPhoto = async (file) => {
   if (!file) return null;
@@ -31,8 +32,24 @@ const findPartnerRecord = (identifier, extra = {}) => {
 // GENERATE PARTNER ID
 // 123 → 123A
 // 123 → 123B
-// 123 → 123C
+// ...
+// 123 → 123Z, 123AA, 123AB, ..., 123AZ, 123BA, ...
+//
+// Base-26 "spreadsheet column" sequence (1-indexed), so it keeps working
+// past the 26th partner for a member instead of overflowing into
+// non-letter characters.
 // ======================================================
+
+const numberToLetters = (n) => {
+  let letters = "";
+  let remaining = n;
+  while (remaining > 0) {
+    remaining -= 1;
+    letters = String.fromCharCode(65 + (remaining % 26)) + letters;
+    remaining = Math.floor(remaining / 26);
+  }
+  return letters;
+};
 
 export const generatePartnerId = async (memberId, tx = prisma) => {
   const member = await tx.member.findUnique({
@@ -58,9 +75,9 @@ export const generatePartnerId = async (memberId, tx = prisma) => {
     ? lastPartner.partnerNumber + 1
     : 1;
 
-  const letter = String.fromCharCode(64 + partnerNumber);
+  const letters = numberToLetters(partnerNumber);
 
-  const partnerId = `${member.memberId}${letter}`;
+  const partnerId = `${member.memberId}${letters}`;
 
   return {
     member,
@@ -106,8 +123,9 @@ export const createPartner = async (data) => {
 
     dateOfJoining,
 
-    validityFrom,
     validityTo,
+    amount,
+    note,
   } = data;
 
   // Partner's own state/city if given, otherwise fall back to the Member's.
@@ -115,6 +133,12 @@ export const createPartner = async (data) => {
   const resolvedLocation = locationGiven
     ? await resolveLocationIds(state, city)
     : null;
+
+  // Validity always starts from the joining date (or today, if none given)
+  // — never trusted from the client. Only the expiry (validityTo) is
+  // admin-entered, when they record the offline payment.
+  const resolvedDateOfJoining = dateOfJoining ? new Date(dateOfJoining) : null;
+  const validityFrom = resolvedDateOfJoining || new Date();
 
   let attempt = 0;
 
@@ -129,7 +153,7 @@ export const createPartner = async (data) => {
           partnerNumber,
         } = await generatePartnerId(memberId, tx);
 
-        return tx.partner.create({
+        const partner = await tx.partner.create({
           data: {
             // Automatically generated
             partnerId,
@@ -179,16 +203,13 @@ export const createPartner = async (data) => {
               : member.cityId,
 
             // ------------------------------------------------
-            // Dates
+            // Dates — validityFrom is always backend-derived, never
+            // client-supplied (see resolvedDateOfJoining/validityFrom above).
             // ------------------------------------------------
 
-            dateOfJoining: dateOfJoining
-              ? new Date(dateOfJoining)
-              : null,
+            dateOfJoining: resolvedDateOfJoining,
 
-            validityFrom: validityFrom
-              ? new Date(validityFrom)
-              : null,
+            validityFrom: validityTo ? validityFrom : null,
 
             validityTo: validityTo
               ? new Date(validityTo)
@@ -198,6 +219,20 @@ export const createPartner = async (data) => {
             isActive: true,
           },
         });
+
+        if (validityTo) {
+          await tx.partnerRenewal.create({
+            data: {
+              partnerId: partner.id,
+              amount: amount !== undefined && amount !== "" ? amount : null,
+              validityFrom,
+              validityTo: new Date(validityTo),
+              note: note || null,
+            },
+          });
+        }
+
+        return partner;
       });
     } catch (error) {
       // P2002 = unique constraint violation (partnerId or [memberId, partnerNumber])
@@ -217,22 +252,24 @@ export const createPartner = async (data) => {
 // ======================================================
 
 export const getPartnerById = async (identifier) => {
-  await syncPartnerActiveStatus();
-
-  const partner = await findPartnerRecord(identifier, {
-    include: {
-      member: {
-        select: {
-          id: true,
-          memberId: true,
-          memberName: true,
+  const [, partner] = await Promise.all([
+    syncPartnerActiveStatus(),
+    findPartnerRecord(identifier, {
+      include: {
+        member: {
+          select: {
+            id: true,
+            memberId: true,
+            memberName: true,
+          },
         },
-      },
 
-      state: true,
-      city: true,
-    },
-  });
+        state: true,
+        city: true,
+        renewals: { orderBy: { paymentDate: "desc" } },
+      },
+    }),
+  ]);
 
 
   if (!partner) {
@@ -249,13 +286,14 @@ export const getPartnerById = async (identifier) => {
 // ======================================================
 
 export const getPartnersByMember = async (memberId) => {
-  await syncPartnerActiveStatus();
-
-  const member = await prisma.member.findUnique({
-    where: {
-      memberId: Number(memberId),
-    },
-  });
+  const [, member] = await Promise.all([
+    syncPartnerActiveStatus(),
+    prisma.member.findUnique({
+      where: {
+        memberId: Number(memberId),
+      },
+    }),
+  ]);
 
   if (!member) {
     throw new Error("Member not found");
@@ -300,7 +338,7 @@ const SORTABLE_PARTNER_FIELDS = [
 ];
 
 export const getAllPartners = async (query = {}) => {
-  await syncPartnerActiveStatus();
+  const syncPromise = syncPartnerActiveStatus();
 
   const {
     search,
@@ -348,32 +386,35 @@ export const getAllPartners = async (query = {}) => {
     : "createdAt";
   const sortOrder = order === "asc" ? "asc" : "desc";
 
-  const [partners, total] = await prisma.$transaction([
-    prisma.partner.findMany({
-      where,
+  const [, [partners, total]] = await Promise.all([
+    syncPromise,
+    prisma.$transaction([
+      prisma.partner.findMany({
+        where,
 
-      include: {
-        member: {
-          select: {
-            id: true,
-            memberId: true,
-            memberName: true,
+        include: {
+          member: {
+            select: {
+              id: true,
+              memberId: true,
+              memberName: true,
+            },
           },
+
+          state: true,
+          city: true,
         },
 
-        state: true,
-        city: true,
-      },
+        orderBy: {
+          [sortField]: sortOrder,
+        },
 
-      orderBy: {
-        [sortField]: sortOrder,
-      },
+        skip: (pageNumber - 1) * pageSize,
+        take: pageSize,
+      }),
 
-      skip: (pageNumber - 1) * pageSize,
-      take: pageSize,
-    }),
-
-    prisma.partner.count({ where }),
+      prisma.partner.count({ where }),
+    ]),
   ]);
 
   return {
@@ -508,8 +549,9 @@ export const updatePartner = async (
 
     dateOfJoining,
 
-    validityFrom,
     validityTo,
+    amount,
+    note,
   } = data;
 
   // Only re-resolve state/city if the client actually sent one of them.
@@ -518,13 +560,48 @@ export const updatePartner = async (
     ? await resolveLocationIds(state, city)
     : { stateId: undefined, cityId: undefined };
 
+  // validityFrom is never client-supplied — if validityTo is being changed
+  // here (rather than through the dedicated renew endpoint), re-derive it
+  // from the joining date the same way create does.
+  const resolvedDateOfJoining =
+    dateOfJoining !== undefined
+      ? dateOfJoining
+        ? new Date(dateOfJoining)
+        : null
+      : undefined;
+  const effectiveDateOfJoining =
+    resolvedDateOfJoining !== undefined ? resolvedDateOfJoining : existingPartner.dateOfJoining;
+
+  const resolvedValidityFrom =
+    validityTo !== undefined
+      ? validityTo
+        ? effectiveDateOfJoining || new Date()
+        : null
+      : undefined;
+  const resolvedValidityTo =
+    validityTo !== undefined ? (validityTo ? new Date(validityTo) : null) : undefined;
+
+  // Editing the partner (rather than using the dedicated /renew endpoint)
+  // can also change validityTo or record an amount paid. Log a
+  // PartnerRenewal the same way create/renew do, but only when something
+  // renewal-worthy actually happened, so routine field edits don't spam
+  // the payment history with no-op entries.
+  const validityActuallyChanged =
+    resolvedValidityTo &&
+    (!existingPartner.validityTo ||
+      resolvedValidityTo.getTime() !== new Date(existingPartner.validityTo).getTime());
+  const amountProvided = amount !== undefined && amount !== "";
+  const renewalValidityFrom = resolvedValidityFrom ?? existingPartner.validityFrom;
+  const renewalValidityTo = resolvedValidityTo ?? existingPartner.validityTo;
+  const shouldLogRenewal =
+    (validityActuallyChanged || amountProvided) && renewalValidityFrom && renewalValidityTo;
 
   // -----------------------------------------------
   // Update Partner
   // -----------------------------------------------
 
-  const updatedPartner =
-    await prisma.partner.update({
+  const updatedPartner = await prisma.$transaction(async (tx) => {
+    const partner = await tx.partner.update({
 
       where: {
         id: existingPartner.id,
@@ -552,26 +629,11 @@ export const updatePartner = async (
         stateId,
         cityId,
 
-        dateOfJoining:
-          dateOfJoining !== undefined
-            ? dateOfJoining
-              ? new Date(dateOfJoining)
-              : null
-            : undefined,
+        dateOfJoining: resolvedDateOfJoining,
 
-        validityFrom:
-          validityFrom !== undefined
-            ? validityFrom
-              ? new Date(validityFrom)
-              : null
-            : undefined,
+        validityFrom: resolvedValidityFrom,
 
-        validityTo:
-          validityTo !== undefined
-            ? validityTo
-              ? new Date(validityTo)
-              : null
-            : undefined,
+        validityTo: resolvedValidityTo,
       },
 
       include: {
@@ -587,16 +649,86 @@ export const updatePartner = async (
       },
     });
 
+    if (shouldLogRenewal) {
+      await tx.partnerRenewal.create({
+        data: {
+          partnerId: existingPartner.id,
+          amount: amountProvided ? amount : null,
+          validityFrom: renewalValidityFrom,
+          validityTo: renewalValidityTo,
+          note: note || null,
+        },
+      });
+    }
+
+    return partner;
+  });
+
 
   // Validity changed — recompute isActive immediately rather than waiting
   // for the next sweep so the response reflects the true status.
-  if (validityFrom !== undefined || validityTo !== undefined) {
+  if (validityTo !== undefined) {
     const recalculated = await updatePartnerActiveStatus(updatedPartner);
     updatedPartner.isActive = recalculated.isActive;
   }
 
 
   return updatedPartner;
+};
+
+
+// ======================================================
+// RENEW PARTNER
+// ======================================================
+
+export const renewPartner = async (identifier, data) => {
+  const existingPartner = await findPartnerRecord(identifier);
+
+  if (!existingPartner) {
+    throw new Error("Partner not found");
+  }
+
+  const { validityTo, amount, note } = data;
+  const validityFrom = nextValidityFrom(existingPartner.validityTo);
+
+  return prisma.$transaction(async (tx) => {
+    const renewed = await tx.partner.update({
+      where: {
+        id: existingPartner.id,
+      },
+
+      data: {
+        validityFrom,
+        validityTo: new Date(validityTo),
+        isActive: true,
+      },
+
+      include: {
+        member: {
+          select: {
+            id: true,
+            memberId: true,
+            memberName: true,
+          },
+        },
+
+        state: true,
+        city: true,
+      },
+    });
+
+    await tx.partnerRenewal.create({
+      data: {
+        partnerId: existingPartner.id,
+        amount: amount !== undefined && amount !== "" ? amount : null,
+        validityFrom,
+        validityTo: new Date(validityTo),
+        note: note || null,
+      },
+    });
+
+    return renewed;
+  });
 };
 
 

@@ -47,11 +47,21 @@ export const createPartnerSchema = Joi.object({
   city: Joi.string().max(100).allow("").optional(),
 
   dateOfJoining: Joi.date().iso().allow("").optional(),
-  validityFrom: Joi.date().iso().allow("").optional(),
   validityTo: Joi.date().iso().allow("").optional(),
+
+  amount: Joi.number().min(0).optional(),
+  note: Joi.string().allow("").optional(),
 });
 
 export const updatePartnerSchema = createPartnerSchema.fork(
   ["memberId", "partnerName"],
   (rule) => rule.optional()
 );
+
+export const renewPartnerSchema = Joi.object({
+  validityTo: Joi.date().iso().required().messages({
+    "any.required": "Validity To date is required",
+  }),
+  amount: Joi.number().min(0).optional(),
+  note: Joi.string().allow("").optional(),
+});

@@ -26,18 +26,44 @@ export const validateMember=[
     .matches(/[A-Z]{5}[0-9]{4}[A-Z]{1}/)
     .withMessage("Invalid PAN Card"),
 
-  body("validityFrom")
-    .optional()
-    .isISO8601()
-    .withMessage("Invalid Validity From date"),
-
   body("validityTo")
     .optional()
     .isISO8601()
     .withMessage("Invalid Validity To date"),
 
+  body("amount")
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage("Amount must be a positive number"),
+
   (req, res, next) => {
 
+    const errors = validationResult(req);
+
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        errors: errors.array(),
+      });
+    }
+
+    next();
+  },
+]
+
+export const validateMemberRenew = [
+  body("validityTo")
+    .notEmpty()
+    .withMessage("Validity To date is required")
+    .isISO8601()
+    .withMessage("Invalid Validity To date"),
+
+  body("amount")
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage("Amount must be a positive number"),
+
+  (req, res, next) => {
     const errors = validationResult(req);
 
     if (!errors.isEmpty()) {

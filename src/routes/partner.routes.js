@@ -6,11 +6,13 @@ import {
   getAllPartners,
   getPartnerById,
   getPartnersByMember,
+  renewPartner,
   updatePartner,
 } from "../controllers/partner.controller.js";
 
 import {
   createPartnerSchema,
+  renewPartnerSchema,
   updatePartnerSchema,
 } from "../validation/partner.validation.js";
 
@@ -91,6 +93,20 @@ router.patch(
   upload.single("photo"),
   validate(updatePartnerSchema),
   updatePartner
+);
+
+
+// ======================================================
+// RENEW PARTNER
+// PATCH /api/v1/partners/:partnerId/renew
+// ======================================================
+
+router.patch(
+  "/:partnerId/renew",
+  isAuthenticated,
+  authorizeRoles("SUPER_ADMIN"),
+  validate(renewPartnerSchema),
+  renewPartner
 );
 
 

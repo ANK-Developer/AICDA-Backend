@@ -15,9 +15,12 @@ export const createMember = async (req, res, next) => {
 
 export const getAllMembers = async (req, res, next) => {
   try {
-    const members = await memberService.getAllMembers(req.query);
+    const { members, pagination, stats } = await memberService.getAllMembers(req.query);
     res.status(200).json({
       success: true,
+      count: members.length,
+      pagination,
+      stats,
       data: members,
     });
   } catch (error) {
@@ -78,6 +81,19 @@ export const toggleMemberStatus = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: member.isActive ? "Member activated successfully" : "Member deactivated successfully",
+      data: member,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const renewMember = async (req, res, next) => {
+  try {
+    const member = await memberService.renewMember(req.params.id, req);
+    res.status(200).json({
+      success: true,
+      message: "Member renewed successfully",
       data: member,
     });
   } catch (error) {

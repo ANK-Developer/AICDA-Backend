@@ -30,3 +30,16 @@ export const resolveLocationIds = async (stateName, cityName) => {
 
   return { stateId, cityId };
 };
+
+// Backs the admin's searchable City field — cities are only known once an
+// admin has entered one for some Member/Partner, so this searches the
+// existing City table (across all states) rather than a canonical external
+// dataset. Freeform entry is still allowed on the form; new city names get
+// upserted the same way on save.
+export const searchCities = async (search) => {
+  return prisma.city.findMany({
+    where: search ? { cityName: { contains: search, mode: "insensitive" } } : {},
+    take: 10,
+    orderBy: { cityName: "asc" },
+  });
+};

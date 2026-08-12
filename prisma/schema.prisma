@@ -93,6 +93,7 @@ model Member {
   city  City?  @relation(fields: [cityId], references: [id])
 
   partners Partner[]
+  renewals MemberRenewal[]
 }
 
 model State {
@@ -168,7 +169,46 @@ model Partner {
   state State? @relation(fields: [stateId], references: [id])
   city  City?  @relation(fields: [cityId], references: [id])
 
+  renewals PartnerRenewal[]
+
   @@unique([memberId, partnerNumber])
+}
+
+// One immutable row per offline payment/renewal — never updated or deleted,
+// so admins can always answer "when did they pay and what did it cover?"
+// even after later renewals move the Member/Partner's own validity dates.
+model MemberRenewal {
+  id Int @id @default(autoincrement())
+
+  memberId Int
+  member   Member @relation(fields: [memberId], references: [id])
+
+  amount      Decimal? @db.Decimal(10, 2)
+  paymentDate DateTime @default(now())
+
+  validityFrom DateTime
+  validityTo   DateTime
+
+  note String?
+
+  createdAt DateTime @default(now())
+}
+
+model PartnerRenewal {
+  id Int @id @default(autoincrement())
+
+  partnerId Int
+  partner   Partner @relation(fields: [partnerId], references: [id])
+
+  amount      Decimal? @db.Decimal(10, 2)
+  paymentDate DateTime @default(now())
+
+  validityFrom DateTime
+  validityTo   DateTime
+
+  note String?
+
+  createdAt DateTime @default(now())
 }
 
 model Enquiry {

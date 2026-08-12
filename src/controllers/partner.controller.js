@@ -156,6 +156,35 @@ export const updatePartner = async (req, res, next) => {
 
 
 // ======================================================
+// RENEW PARTNER
+// PATCH /api/v1/partners/:partnerId/renew
+// ======================================================
+
+export const renewPartner = async (req, res, next) => {
+  try {
+    const { partnerId } = req.params;
+
+    const partner = await partnerService.renewPartner(partnerId, req.body);
+
+    return res.status(200).json({
+      success: true,
+      message: "Partner renewed successfully",
+      data: partner,
+    });
+  } catch (error) {
+    if (error.message === "Partner not found") {
+      return res.status(404).json({
+        success: false,
+        message: "Partner not found",
+      });
+    }
+
+    next(error);
+  }
+};
+
+
+// ======================================================
 // DELETE PARTNER
 // DELETE /api/v1/partners/:partnerId
 // ======================================================
