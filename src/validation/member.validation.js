@@ -21,9 +21,6 @@ export const validateMember=[
     .isLength({ min: 12, max: 12 })
     .withMessage("Aadhar must contain 12 digits"),
 
-  body("district")
-    .optional(),
-
   body("panCardNo")
     .optional()
     .matches(/[A-Z]{5}[0-9]{4}[A-Z]{1}/)

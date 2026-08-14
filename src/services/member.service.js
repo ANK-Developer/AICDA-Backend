@@ -47,7 +47,6 @@ export const createMember = async (req) => {
         validityTo,
         aadharNo: body.aadharNo || null,
         stateId,
-        district: body.district || null,
         cityId,
       },
     });
@@ -126,10 +125,10 @@ export const getAllMembers = async (query = {}) => {
     const isNumeric = /^\d+$/.test(search.trim());
     where.OR = [
       ...(isNumeric ? [{ memberId: Number(search.trim()) }] : []),
-      { memberName: { contains: search } },
-      { companyName: { contains: search } },
-      { mobile: { contains: search } },
-      { designation: { contains: search } },
+      { memberName: { contains: search, mode: "insensitive" } },
+      { companyName: { contains: search, mode: "insensitive" } },
+      { mobile: { contains: search, mode: "insensitive" } },
+      { designation: { contains: search, mode: "insensitive" } },
     ];
   }
 
@@ -307,7 +306,6 @@ export const updateMember = async (id, req) => {
     validityTo: resolvedValidityTo,
     aadharNo: body.aadharNo,
     stateId,
-    district: body.district,
     cityId,
   };
 

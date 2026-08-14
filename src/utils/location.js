@@ -38,7 +38,7 @@ export const resolveLocationIds = async (stateName, cityName) => {
 // upserted the same way on save.
 export const searchCities = async (search) => {
   return prisma.city.findMany({
-    where: search ? { cityName: { contains: search } } : {},
+    where: search ? { cityName: { contains: search, mode: "insensitive" } } : {},
     take: 10,
     orderBy: { cityName: "asc" },
   });

@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -83,7 +83,6 @@ model Member {
   validityTo           DateTime?
   aadharNo             String?
   stateId              Int?
-  district             String?
   cityId               Int?
   isActive             Boolean   @default(true)
 
