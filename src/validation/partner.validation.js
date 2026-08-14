@@ -24,13 +24,7 @@ export const createPartnerSchema = Joi.object({
 
   residentialTelephone: Joi.string().allow("").optional(),
 
-  panCardNo: Joi.string()
-    .pattern(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/)
-    .allow("")
-    .optional()
-    .messages({
-      "string.pattern.base": "Invalid PAN Card",
-    }),
+  panCardNo: Joi.string().allow("").optional(),
 
   aadharNo: Joi.string().length(12).allow("").optional().messages({
     "string.length": "Aadhar must contain 12 digits",

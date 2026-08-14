@@ -21,11 +21,6 @@ export const validateMember=[
     .isLength({ min: 12, max: 12 })
     .withMessage("Aadhar must contain 12 digits"),
 
-  body("panCardNo")
-    .optional()
-    .matches(/[A-Z]{5}[0-9]{4}[A-Z]{1}/)
-    .withMessage("Invalid PAN Card"),
-
   body("validityTo")
     .optional()
     .isISO8601()
