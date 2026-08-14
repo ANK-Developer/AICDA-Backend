@@ -7,6 +7,7 @@ import {
   getPartnerById,
   getPartnersByMember,
   renewPartner,
+  togglePartnerStatus,
   updatePartner,
 } from "../controllers/partner.controller.js";
 
@@ -93,6 +94,19 @@ router.patch(
   upload.single("photo"),
   validate(updatePartnerSchema),
   updatePartner
+);
+
+
+// ======================================================
+// TOGGLE PARTNER STATUS
+// PATCH /api/v1/partners/:partnerId/status
+// ======================================================
+
+router.patch(
+  "/:partnerId/status",
+  isAuthenticated,
+  authorizeRoles("SUPER_ADMIN"),
+  togglePartnerStatus
 );
 
 

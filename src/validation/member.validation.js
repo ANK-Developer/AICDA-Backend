@@ -21,6 +21,9 @@ export const validateMember=[
     .isLength({ min: 12, max: 12 })
     .withMessage("Aadhar must contain 12 digits"),
 
+  body("district")
+    .optional(),
+
   body("validityTo")
     .optional()
     .isISO8601()

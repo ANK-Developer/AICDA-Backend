@@ -69,28 +69,22 @@ export const createMember = async (req) => {
 };
 
 // Validity isn't watched by a scheduler, so this sweep runs before every
-// read and keeps isActive self-healing (in both directions) without a
-// cron job — mirrors partner.service.js's syncPartnerActiveStatus.
+// read and keeps isActive self-healing on expiry — mirrors
+// partner.service.js's syncPartnerActiveStatus. It only ever turns an
+// expired member off; it never turns one back on, otherwise a manual
+// deactivation (toggleMemberStatus) would get silently reverted the next
+// time the list is loaded, while the validity window is still current.
+// Reactivation happens explicitly, via renew or by extending validityTo.
 export const syncMemberActiveStatus = async () => {
   const now = new Date();
 
-  await prisma.$transaction([
-    prisma.member.updateMany({
-      where: {
-        isActive: true,
-        OR: [{ validityTo: null }, { validityTo: { lt: now } }],
-      },
-      data: { isActive: false },
-    }),
-
-    prisma.member.updateMany({
-      where: {
-        isActive: false,
-        validityTo: { gte: now },
-      },
-      data: { isActive: true },
-    }),
-  ]);
+  await prisma.member.updateMany({
+    where: {
+      isActive: true,
+      OR: [{ validityTo: null }, { validityTo: { lt: now } }],
+    },
+    data: { isActive: false },
+  });
 };
 
 const SORTABLE_MEMBER_FIELDS = [
@@ -126,10 +120,10 @@ export const getAllMembers = async (query = {}) => {
     const isNumeric = /^\d+$/.test(search.trim());
     where.OR = [
       ...(isNumeric ? [{ memberId: Number(search.trim()) }] : []),
-      { memberName: { contains: search, mode: "insensitive" } },
-      { companyName: { contains: search, mode: "insensitive" } },
-      { mobile: { contains: search, mode: "insensitive" } },
-      { designation: { contains: search, mode: "insensitive" } },
+      { memberName: { contains: search } },
+      { companyName: { contains: search } },
+      { mobile: { contains: search } },
+      { designation: { contains: search } },
     ];
   }
 
@@ -288,6 +282,17 @@ export const updateMember = async (id, req) => {
   const resolvedValidityTo =
     body.validityTo !== undefined ? (body.validityTo ? new Date(body.validityTo) : null) : undefined;
 
+  // Now that syncMemberActiveStatus never auto-reactivates (see that
+  // function's comment), extending the expiry here — rather than through
+  // /renew, which already sets isActive itself — has to flip isActive back
+  // on explicitly. Only recompute when validityTo actually moved, so
+  // resaving the form without touching the date can't undo a manual
+  // toggleMemberStatus deactivation.
+  const validityToChanged =
+    body.validityTo !== undefined &&
+    (existing.validityTo ? existing.validityTo.getTime() : null) !==
+      (resolvedValidityTo ? resolvedValidityTo.getTime() : null);
+
   const data = {
     memberId: body.memberId !== undefined ? Number(body.memberId) : undefined,
     memberName: body.memberName,
@@ -307,7 +312,11 @@ export const updateMember = async (id, req) => {
     validityTo: resolvedValidityTo,
     aadharNo: body.aadharNo,
     stateId,
+    district: body.district,
     cityId,
+    ...(validityToChanged && {
+      isActive: Boolean(resolvedValidityTo && resolvedValidityTo.getTime() >= Date.now()),
+    }),
   };
 
   Object.keys(data).forEach((key) => {

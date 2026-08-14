@@ -156,6 +156,35 @@ export const updatePartner = async (req, res, next) => {
 
 
 // ======================================================
+// TOGGLE PARTNER STATUS
+// PATCH /api/v1/partners/:partnerId/status
+// ======================================================
+
+export const togglePartnerStatus = async (req, res, next) => {
+  try {
+    const { partnerId } = req.params;
+
+    const partner = await partnerService.togglePartnerStatus(partnerId);
+
+    return res.status(200).json({
+      success: true,
+      message: partner.isActive ? "Partner activated successfully" : "Partner deactivated successfully",
+      data: partner,
+    });
+  } catch (error) {
+    if (error.message === "Partner not found") {
+      return res.status(404).json({
+        success: false,
+        message: "Partner not found",
+      });
+    }
+
+    next(error);
+  }
+};
+
+
+// ======================================================
 // RENEW PARTNER
 // PATCH /api/v1/partners/:partnerId/renew
 // ======================================================

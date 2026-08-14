@@ -356,10 +356,10 @@ export const getAllPartners = async (query = {}) => {
 
   if (search) {
     where.OR = [
-      { partnerName: { contains: search, mode: "insensitive" } },
-      { partnerId: { contains: search, mode: "insensitive" } },
-      { mobile: { contains: search, mode: "insensitive" } },
-      { panCardNo: { contains: search, mode: "insensitive" } },
+      { partnerName: { contains: search } },
+      { partnerId: { contains: search } },
+      { mobile: { contains: search } },
+      { panCardNo: { contains: search } },
     ];
   }
 
@@ -436,34 +436,27 @@ export const getAllPartners = async (query = {}) => {
 // read and keeps isActive self-healing without a cron job.
 // ======================================================
 
+// Only ever turns an expired/not-yet-started partner off; it never turns
+// one back on. Reactivating on every sweep would silently revert a manual
+// deactivation (togglePartnerStatus) the next time the list is loaded,
+// as long as the validity window was still current. Reactivation happens
+// explicitly instead, via renew or by updatePartnerActiveStatus when
+// validityTo is actually edited.
 export const syncPartnerActiveStatus = async () => {
   const now = new Date();
 
-  await prisma.$transaction([
-    // No validity window, not yet started, or expired → inactive.
-    prisma.partner.updateMany({
-      where: {
-        isActive: true,
-        OR: [
-          { validityFrom: null },
-          { validityTo: null },
-          { validityFrom: { gt: now } },
-          { validityTo: { lt: now } },
-        ],
-      },
-      data: { isActive: false },
-    }),
-
-    // Currently inside the validity window → active.
-    prisma.partner.updateMany({
-      where: {
-        isActive: false,
-        validityFrom: { lte: now },
-        validityTo: { gte: now },
-      },
-      data: { isActive: true },
-    }),
-  ]);
+  await prisma.partner.updateMany({
+    where: {
+      isActive: true,
+      OR: [
+        { validityFrom: null },
+        { validityTo: null },
+        { validityFrom: { gt: now } },
+        { validityTo: { lt: now } },
+      ],
+    },
+    data: { isActive: false },
+  });
 };
 
 
@@ -581,6 +574,15 @@ export const updatePartner = async (
   const resolvedValidityTo =
     validityTo !== undefined ? (validityTo ? new Date(validityTo) : null) : undefined;
 
+  // Whether this edit actually moves validityTo (vs. resaving the form with
+  // the same date, or not touching it at all) — recomputing isActive below
+  // is guarded by this so a manual togglePartnerStatus deactivation can't
+  // get silently undone by an unrelated field edit.
+  const validityToChanged =
+    validityTo !== undefined &&
+    (existingPartner.validityTo ? existingPartner.validityTo.getTime() : null) !==
+      (resolvedValidityTo ? resolvedValidityTo.getTime() : null);
+
   // Editing the partner (rather than using the dedicated /renew endpoint)
   // can also change validityTo or record an amount paid. Log a
   // PartnerRenewal the same way create/renew do, but only when something
@@ -667,7 +669,7 @@ export const updatePartner = async (
 
   // Validity changed — recompute isActive immediately rather than waiting
   // for the next sweep so the response reflects the true status.
-  if (validityTo !== undefined) {
+  if (validityToChanged) {
     const recalculated = await updatePartnerActiveStatus(updatedPartner);
     updatedPartner.isActive = recalculated.isActive;
   }
@@ -733,11 +735,41 @@ export const renewPartner = async (identifier, data) => {
 
 
 // ======================================================
+// TOGGLE PARTNER STATUS (manual override)
+// ======================================================
+
+export const togglePartnerStatus = async (identifier) => {
+  const partner = await findPartnerRecord(identifier);
+
+  if (!partner) {
+    throw new Error("Partner not found");
+  }
+
+  return prisma.partner.update({
+    where: { id: partner.id },
+    data: { isActive: !partner.isActive },
+    include: {
+      member: {
+        select: {
+          id: true,
+          memberId: true,
+          memberName: true,
+        },
+      },
+
+      state: true,
+      city: true,
+    },
+  });
+};
+
+
+// ======================================================
 // UPDATE PARTNER ACTIVE STATUS
 // ======================================================
 //
-// Backend calculates status from validity.
-// Frontend should NOT send isActive.
+// Backend calculates status from validity, except for the manual
+// override above — Frontend should not send isActive on create/update.
 // ======================================================
 
 export const updatePartnerActiveStatus = async (
