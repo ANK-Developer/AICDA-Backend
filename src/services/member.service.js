@@ -47,6 +47,7 @@ export const createMember = async (req) => {
         validityTo,
         aadharNo: body.aadharNo || null,
         stateId,
+        district: body.district || null,
         cityId,
       },
     });
