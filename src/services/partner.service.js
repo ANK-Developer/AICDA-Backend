@@ -356,10 +356,10 @@ export const getAllPartners = async (query = {}) => {
 
   if (search) {
     where.OR = [
-      { partnerName: { contains: search, mode: "insensitive" } },
-      { partnerId: { contains: search, mode: "insensitive" } },
-      { mobile: { contains: search, mode: "insensitive" } },
-      { panCardNo: { contains: search, mode: "insensitive" } },
+      { partnerName: { contains: search } },
+      { partnerId: { contains: search } },
+      { mobile: { contains: search } },
+      { panCardNo: { contains: search } },
     ];
   }
 

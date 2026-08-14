@@ -54,9 +54,31 @@ app.use(
   "/api/v1/partners",
   partnerRoutes
 );
+// Human-readable names for the unique fields Prisma can reject a create/update
+// on — keeps the P2002 handler below from ever surfacing a raw column name.
+const UNIQUE_FIELD_LABELS = {
+  memberId: "Member ID",
+  partnerId: "Partner ID",
+  email: "Email",
+  phone: "Phone number",
+};
+
 // Fallback JSON error handler (e.g. errors passed via next(error) from member routes)
 app.use((error, req, res, next) => {
   console.error(error);
+
+  // P2002 = Prisma unique constraint violation — e.g. saving a Member ID
+  // that already exists. Without this, the raw
+  // `Invalid \`prisma.member.create()\` invocation: ...` message leaks to
+  // the client as a 500 instead of a clean, actionable 409.
+  if (error.code === "P2002") {
+    const field = Array.isArray(error.meta?.target) ? error.meta.target[0] : error.meta?.target;
+    const label = UNIQUE_FIELD_LABELS[field] || field || "value";
+    return res.status(409).json({
+      success: false,
+      message: `${label} already exists. Please use a different ${label}.`,
+    });
+  }
 
   res.status(error.status || 500).json({
     success: false,
