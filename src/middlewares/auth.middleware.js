@@ -3,7 +3,10 @@ import prisma from "../config/prisma.js";
 
 export const isAuthenticated = async (req, res, next) => {
   try {
-    const token = req.cookies?.token;
+    const bearerToken = req.headers.authorization?.startsWith("Bearer ")
+      ? req.headers.authorization.slice(7)
+      : null;
+    const token = req.cookies?.token || bearerToken;
 
     if (!token) {
       return res.status(401).json({
