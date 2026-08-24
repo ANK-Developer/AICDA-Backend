@@ -16,6 +16,11 @@ export const validateMember=[
     .matches(/^[0-9]{10}$/)
     .withMessage("Mobile number must be exactly 10 digits"),
 
+  body("dateOfBirth")
+    .optional()
+    .isISO8601()
+    .withMessage("Invalid Date of Birth"),
+
   body("aadharNo")
     .optional()
     .isLength({ min: 12, max: 12 })

@@ -32,6 +32,7 @@ export const createMember = async (req) => {
         memberId: Number(body.memberId),
         memberName: body.memberName,
         fatherName: body.fatherName || null,
+        dateOfBirth: body.dateOfBirth ? new Date(body.dateOfBirth) : null,
         photo,
         residentialAddress: body.residentialAddress || null,
         mobile: body.mobile || null,
@@ -297,6 +298,8 @@ export const updateMember = async (id, req) => {
     memberId: body.memberId !== undefined ? Number(body.memberId) : undefined,
     memberName: body.memberName,
     fatherName: body.fatherName,
+    dateOfBirth:
+      body.dateOfBirth !== undefined ? (body.dateOfBirth ? new Date(body.dateOfBirth) : null) : undefined,
     photo,
     residentialAddress: body.residentialAddress,
     mobile: body.mobile,
@@ -413,6 +416,45 @@ export const renewMember = async (id, req) => {
 
     return renewed;
   });
+};
+
+// Active members whose birthday (month/day) falls within the next 7 days,
+// including today — backs the admin Important Dates panel's birthday
+// reminders. Only active members are considered, since an expired
+// membership isn't worth reminding the admin about.
+export const getUpcomingBirthdays = async () => {
+  const members = await prisma.member.findMany({
+    where: {
+      isActive: true,
+      dateOfBirth: { not: null },
+    },
+    select: {
+      id: true,
+      memberId: true,
+      memberName: true,
+      dateOfBirth: true,
+      photo: true,
+    },
+  });
+
+  const today = new Date();
+  const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  return members
+    .map((member) => {
+      const dob = new Date(member.dateOfBirth);
+
+      let nextBirthday = new Date(todayOnly.getFullYear(), dob.getMonth(), dob.getDate());
+      if (nextBirthday < todayOnly) {
+        nextBirthday = new Date(todayOnly.getFullYear() + 1, dob.getMonth(), dob.getDate());
+      }
+
+      const daysLeft = Math.round((nextBirthday - todayOnly) / (1000 * 60 * 60 * 24));
+
+      return { ...member, nextBirthday, daysLeft };
+    })
+    .filter((member) => member.daysLeft <= 7)
+    .sort((a, b) => a.daysLeft - b.daysLeft);
 };
 
 export const deleteMember = async (id) => {

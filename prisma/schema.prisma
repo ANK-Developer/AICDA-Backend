@@ -63,11 +63,11 @@ model Gallery {
 }
 
 model Member {
-  id Int @id @default(autoincrement())
-
+  id                   Int       @id @default(autoincrement())
   memberId             Int       @unique
   memberName           String
   fatherName           String?
+  dateOfBirth          DateTime?
   photo                String?
   residentialAddress   String?
   mobile               String?
@@ -87,14 +87,18 @@ model Member {
   cityId               Int?
   isActive             Boolean   @default(true)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  state State? @relation(fields: [stateId], references: [id])
-  city  City?  @relation(fields: [cityId], references: [id])
+  state                State?    @relation(fields: [stateId], references: [id])
+  city                 City?     @relation(fields: [cityId], references: [id])
 
-  partners Partner[]
-  renewals MemberRenewal[]
+  partners             Partner[]
+  renewals             MemberRenewal[]
+
+  @@index([isActive])
+  @@index([stateId])
+  @@index([cityId])
 }
 
 model State {
@@ -123,7 +127,6 @@ model City {
 
   @@unique([cityName, stateId])
 }
-
 model Partner {
   id Int @id @default(autoincrement())
 
@@ -173,6 +176,9 @@ model Partner {
   renewals PartnerRenewal[]
 
   @@unique([memberId, partnerNumber])
+  @@index([isActive])
+  @@index([stateId])
+  @@index([cityId])
 }
 
 // One immutable row per offline payment/renewal — never updated or deleted,
@@ -193,6 +199,8 @@ model MemberRenewal {
   note String?
 
   createdAt DateTime @default(now())
+
+  @@index([memberId])
 }
 
 model PartnerRenewal {
@@ -210,6 +218,21 @@ model PartnerRenewal {
   note String?
 
   createdAt DateTime @default(now())
+
+  @@index([partnerId])
+}
+
+model ImportantDate {
+  id Int @id @default(autoincrement())
+
+  title       String
+  date        DateTime
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
 }
 
 model Enquiry {
@@ -227,4 +250,7 @@ model Enquiry {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
 }
