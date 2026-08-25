@@ -70,6 +70,36 @@ app.use(
 app.use((error, req, res, next) => {
   console.error(error);
 
+  // Prisma unique-constraint violation (P2002) — surface the offending
+  // field instead of leaking the raw Prisma error string to the client.
+  // On MySQL, meta.target is the constraint name (e.g. "Member_memberId_key"),
+  // not an array of field names like on Postgres, so pull the field out of it.
+  if (error.code === "P2002") {
+    const target = error.meta?.target;
+    let field = "value";
+    if (Array.isArray(target)) {
+      field = target[0] || field;
+    } else if (typeof target === "string") {
+      field = target.match(/_([A-Za-z0-9]+)_key$/)?.[1] || target;
+    }
+    // Human-readable labels for the fields admins actually hit this on —
+    // falls back to the raw field name for anything not listed here.
+    const FIELD_LABELS = {
+      memberId: "Member ID",
+      partnerId: "Partner ID",
+      email: "Email",
+      phone: "Phone",
+    };
+    const label = FIELD_LABELS[field] || field;
+    const value = req.body?.[field];
+    return res.status(409).json({
+      success: false,
+      message: value
+        ? `${label} "${value}" is already in use — please use a different ${label}.`
+        : `This ${label} is already in use — please use a different ${label}.`,
+    });
+  }
+
   res.status(error.status || 500).json({
     success: false,
     message: error.message || "Internal Server Error",

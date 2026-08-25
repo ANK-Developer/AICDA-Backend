@@ -3,7 +3,7 @@ import * as memberService from "../services/member.service.js";
 
 export const createImportantDate = async (req, res, next) => {
   try {
-    const importantDate = await importantDateService.createImportantDate(req.body);
+    const importantDate = await importantDateService.createImportantDate(req.body, req.file);
     res.status(201).json({
       success: true,
       message: "Important date created successfully",
@@ -48,7 +48,11 @@ export const getImportantDateById = async (req, res, next) => {
 
 export const updateImportantDate = async (req, res, next) => {
   try {
-    const importantDate = await importantDateService.updateImportantDate(req.params.id, req.body);
+    const importantDate = await importantDateService.updateImportantDate(
+      req.params.id,
+      req.body,
+      req.file,
+    );
     res.status(200).json({
       success: true,
       message: "Important date updated successfully",
