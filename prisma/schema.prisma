@@ -54,7 +54,7 @@ model Gallery {
   title        String
   description  String?
   imageUrl     String
-  publicId     String
+ 
   category     GalleryCategory
   resourceType GalleryResourceType @default(IMAGE)
 

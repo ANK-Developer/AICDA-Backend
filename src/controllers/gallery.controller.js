@@ -1,30 +1,23 @@
-import cloudinary, { uploadBufferToCloudinary } from "../config/cloudinary.js";
 import prisma from "../config/prisma.js";
+import fs from "fs";
+import path from "path";
 
-const GALLERY_CATEGORIES = [
-  "ASSOCIATION",
-  "POLITICAL_ACHIEVEMENT",
-  "IMAGE",
-  "DIRECTORY",
-  "LETTER",
-  "BANNER",
-];
+const GALLERY_CATEGORIES = ["ASSOCIATION", "POLITICAL_ACHIEVEMENT", "IMAGE", "DIRECTORY", "LETTER", "BANNER"];
 
 const getResourceType = (mimetype) => (mimetype.startsWith("video/") ? "video" : "image");
 
 // ==========================
-// Upload Image
+// Upload Image / Video
 // ==========================
-export const uploadImage = async (req, res) => {
-  let uploadedImage = null;
 
+export const uploadImage = async (req, res) => {
   try {
     const { title, description, category } = req.body;
 
     if (!req.file) {
       return res.status(400).json({
         success: false,
-        message: "Image is required",
+        message: "Image or video is required",
       });
     }
 
@@ -37,18 +30,16 @@ export const uploadImage = async (req, res) => {
 
     const resourceType = getResourceType(req.file.mimetype);
 
-    uploadedImage = await uploadBufferToCloudinary(req.file.buffer, {
-      folder: "aicda/gallery",
-      resource_type: resourceType,
-    });
+    // Save only path in database
+    const fileUrl = `/uploads/${req.file.filename}`;
 
     const gallery = await prisma.gallery.create({
       data: {
         title: title?.trim() || req.file.originalname,
         description: description?.trim() || null,
         category,
-        imageUrl: uploadedImage.secure_url,
-        publicId: uploadedImage.public_id,
+        imageUrl: fileUrl,
+
         resourceType: resourceType.toUpperCase(),
       },
     });
@@ -59,10 +50,9 @@ export const uploadImage = async (req, res) => {
       gallery,
     });
   } catch (error) {
-    if (uploadedImage?.public_id) {
-      await cloudinary.uploader
-        .destroy(uploadedImage.public_id, { resource_type: uploadedImage.resource_type })
-        .catch(() => {});
+    // Remove uploaded file if database operation fails
+    if (req.file?.path && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
     }
 
     console.error(error);
@@ -77,6 +67,7 @@ export const uploadImage = async (req, res) => {
 // ==========================
 // Get Gallery Images
 // ==========================
+
 export const getGalleryImages = async (req, res) => {
   try {
     const { category } = req.query;
@@ -111,8 +102,9 @@ export const getGalleryImages = async (req, res) => {
 };
 
 // ==========================
-// Get Single Image
+// Get Single Image / Video
 // ==========================
+
 export const getSingleGalleryImage = async (req, res) => {
   try {
     const gallery = await prisma.gallery.findUnique({
@@ -143,11 +135,10 @@ export const getSingleGalleryImage = async (req, res) => {
 };
 
 // ==========================
-// Update Image
+// Update Image / Video
 // ==========================
-export const updateGalleryImage = async (req, res) => {
-  let uploadedImage = null;
 
+export const updateGalleryImage = async (req, res) => {
   try {
     const gallery = await prisma.gallery.findUnique({
       where: {
@@ -173,25 +164,24 @@ export const updateGalleryImage = async (req, res) => {
 
     const data = {};
 
-    if (title !== undefined)
+    if (title !== undefined) {
       data.title = title.trim();
+    }
 
-    if (description !== undefined)
+    if (description !== undefined) {
       data.description = description.trim() || null;
+    }
 
-    if (category !== undefined)
+    if (category !== undefined) {
       data.category = category;
+    }
 
+    // New image/video uploaded
     if (req.file) {
       const resourceType = getResourceType(req.file.mimetype);
 
-      uploadedImage = await uploadBufferToCloudinary(req.file.buffer, {
-        folder: "aicda/gallery",
-        resource_type: resourceType,
-      });
+      data.imageUrl = `/uploads/${req.file.filename}`;
 
-      data.imageUrl = uploadedImage.secure_url;
-      data.publicId = uploadedImage.public_id;
       data.resourceType = resourceType.toUpperCase();
     }
 
@@ -202,6 +192,7 @@ export const updateGalleryImage = async (req, res) => {
       });
     }
 
+    // Update database
     const updatedGallery = await prisma.gallery.update({
       where: {
         id: req.params.id,
@@ -209,10 +200,13 @@ export const updateGalleryImage = async (req, res) => {
       data,
     });
 
-    if (uploadedImage) {
-      await cloudinary.uploader
-        .destroy(gallery.publicId, { resource_type: gallery.resourceType.toLowerCase() })
-        .catch(() => {});
+    // Delete old physical file
+    if (req.file && gallery.imageUrl) {
+      const oldFilePath = path.join(process.cwd(), "src", gallery.imageUrl.replace("/uploads/", "uploads/"));
+
+      if (fs.existsSync(oldFilePath)) {
+        fs.unlinkSync(oldFilePath);
+      }
     }
 
     return res.status(200).json({
@@ -221,10 +215,9 @@ export const updateGalleryImage = async (req, res) => {
       gallery: updatedGallery,
     });
   } catch (error) {
-    if (uploadedImage?.public_id) {
-      await cloudinary.uploader
-        .destroy(uploadedImage.public_id, { resource_type: uploadedImage.resource_type })
-        .catch(() => {});
+    // Delete newly uploaded file if database update fails
+    if (req.file?.path && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
     }
 
     console.error(error);
@@ -237,8 +230,9 @@ export const updateGalleryImage = async (req, res) => {
 };
 
 // ==========================
-// Delete Image
+// Delete Image / Video
 // ==========================
+
 export const deleteGalleryImage = async (req, res) => {
   try {
     const gallery = await prisma.gallery.findUnique({
@@ -254,10 +248,16 @@ export const deleteGalleryImage = async (req, res) => {
       });
     }
 
-    await cloudinary.uploader.destroy(gallery.publicId, {
-      resource_type: gallery.resourceType.toLowerCase(),
-    });
+    // Delete physical file from src/uploads
+    if (gallery.imageUrl) {
+      const filePath = path.join(process.cwd(), "src", gallery.imageUrl.replace("/uploads/", "uploads/"));
 
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+
+    // Delete database record
     await prisma.gallery.delete({
       where: {
         id: req.params.id,

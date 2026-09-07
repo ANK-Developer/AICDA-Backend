@@ -11,10 +11,18 @@ import authRoutes from "./routes/auth.route.js";
 import superAdminRoutes from "./routes/superAdmin.routs.js";
 import locationRoutes from "./routes/location.routes.js";
 import importantDateRoutes from "./routes/importantDate.routes.js";
+import path from "path";
+import { fileURLToPath } from "url";
 
 dotenv.config();
 
 const app = express();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
 app.use(compression());
 // Allow the frontend to call the API and send the login cookie.
 // LAN IPs (e.g. 192.168.x.x:8080) are allowed dynamically since the dev
@@ -23,12 +31,7 @@ const LAN_ORIGIN = /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:8080$/;
 app.use(
   cors({
     origin(origin, callback) {
-      if (
-        !origin ||
-        origin === "http://localhost:8080" ||
-        origin === process.env.Frontend_URL ||
-        LAN_ORIGIN.test(origin)
-      ) {
+      if (!origin || origin === "http://localhost:8080" || origin === process.env.Frontend_URL || LAN_ORIGIN.test(origin)) {
         callback(null, true);
       } else {
         callback(new Error("Not allowed by CORS"));
@@ -62,10 +65,7 @@ app.use("/api/v1/enquiries", enquiryRoutes);
 app.use("/api/v1/super-admin", superAdminRoutes);
 app.use("/api/v1/locations", locationRoutes);
 app.use("/api/v1/important-dates", importantDateRoutes);
-app.use(
-  "/api/v1/partners",
-  partnerRoutes
-);
+app.use("/api/v1/partners", partnerRoutes);
 // Fallback JSON error handler (e.g. errors passed via next(error) from member routes)
 app.use((error, req, res, next) => {
   console.error(error);
@@ -94,9 +94,7 @@ app.use((error, req, res, next) => {
     const value = req.body?.[field];
     return res.status(409).json({
       success: false,
-      message: value
-        ? `${label} "${value}" is already in use — please use a different ${label}.`
-        : `This ${label} is already in use — please use a different ${label}.`,
+      message: value ? `${label} "${value}" is already in use — please use a different ${label}.` : `This ${label} is already in use — please use a different ${label}.`,
     });
   }
 

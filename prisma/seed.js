@@ -8,7 +8,7 @@ async function main() {
 
   const existing = await prisma.admin.findUnique({
     where: {
-      email: "superadmin@gmail.com",
+      email: "admin@gmail.com",
     },
   });
 

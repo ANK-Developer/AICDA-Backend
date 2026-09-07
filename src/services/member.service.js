@@ -1,24 +1,24 @@
 import prisma from "../config/prisma.js";
-import { uploadBufferToCloudinary } from "../config/cloudinary.js";
 import { resolveLocationIds } from "../utils/location.js";
 import { isValidToday, nextValidityFrom } from "../utils/validity.js";
 
-const uploadMemberPhoto = async (file) => {
+const getLocalPhotoPath = (file) => {
   if (!file) return null;
-  const uploaded = await uploadBufferToCloudinary(file.buffer, {
-    folder: "aicda/members",
-    resource_type: "image",
-  });
-  return uploaded.secure_url;
-};
 
+  return `/uploads/${file.filename}`;
+};
 export const createMember = async (req) => {
   const body = req.body;
   const [photo, { stateId, cityId }] = await Promise.all([
-    uploadMemberPhoto(req.file),
-    resolveLocationIds(body.state, body.city),
-  ]);
+    req.file ? Promise.resolve(getLocalPhotoPath(req.file)) : Promise.resolve(undefined),
 
+    body.state !== undefined || body.city !== undefined
+      ? resolveLocationIds(body.state, body.city)
+      : Promise.resolve({
+          stateId: undefined,
+          cityId: undefined,
+        }),
+  ]);
   // Validity always starts from the joining date (or today, if none given)
   // — never trusted from the client. Only the expiry (validityTo) is
   // admin-entered, when they record the offline payment.
@@ -88,15 +88,7 @@ export const syncMemberActiveStatus = async () => {
   });
 };
 
-const SORTABLE_MEMBER_FIELDS = [
-  "createdAt",
-  "updatedAt",
-  "memberId",
-  "memberName",
-  "dateOfJoining",
-  "validityFrom",
-  "validityTo",
-];
+const SORTABLE_MEMBER_FIELDS = ["createdAt", "updatedAt", "memberId", "memberName", "dateOfJoining", "validityFrom", "validityTo"];
 
 // Supports: search (memberId/memberName/companyName/mobile/designation),
 // status (active/inactive), stateId, cityId, page, limit, sortBy, order —
@@ -104,28 +96,13 @@ const SORTABLE_MEMBER_FIELDS = [
 export const getAllMembers = async (query = {}) => {
   const syncPromise = syncMemberActiveStatus();
 
-  const {
-    search,
-    status,
-    stateId,
-    cityId,
-    page = 1,
-    limit = 10,
-    sortBy = "createdAt",
-    order = "desc",
-  } = query;
+  const { search, status, stateId, cityId, page = 1, limit = 10, sortBy = "createdAt", order = "desc" } = query;
 
   const where = {};
 
   if (search) {
     const isNumeric = /^\d+$/.test(search.trim());
-    where.OR = [
-      ...(isNumeric ? [{ memberId: Number(search.trim()) }] : []),
-      { memberName: { contains: search } },
-      { companyName: { contains: search } },
-      { mobile: { contains: search } },
-      { designation: { contains: search } },
-    ];
+    where.OR = [...(isNumeric ? [{ memberId: Number(search.trim()) }] : []), { memberName: { contains: search } }, { companyName: { contains: search } }, { mobile: { contains: search } }, { designation: { contains: search } }];
   }
 
   if (status === "active") where.isActive = true;
@@ -256,32 +233,23 @@ export const updateMember = async (id, req) => {
 
   const body = req.body;
   const [photo, { stateId, cityId }] = await Promise.all([
-    req.file ? uploadMemberPhoto(req.file) : Promise.resolve(undefined),
+    req.file ? Promise.resolve(getLocalPhotoPath(req.file)) : Promise.resolve(undefined),
+
     body.state !== undefined || body.city !== undefined
       ? resolveLocationIds(body.state, body.city)
-      : Promise.resolve({ stateId: undefined, cityId: undefined }),
+      : Promise.resolve({
+          stateId: undefined,
+          cityId: undefined,
+        }),
   ]);
-
   // validityFrom is never client-supplied — if validityTo is being changed
   // here (rather than through the dedicated renew endpoint), re-derive it
   // from the joining date the same way create does.
-  const resolvedDateOfJoining =
-    body.dateOfJoining !== undefined
-      ? body.dateOfJoining
-        ? new Date(body.dateOfJoining)
-        : null
-      : undefined;
-  const effectiveDateOfJoining =
-    resolvedDateOfJoining !== undefined ? resolvedDateOfJoining : existing.dateOfJoining;
+  const resolvedDateOfJoining = body.dateOfJoining !== undefined ? (body.dateOfJoining ? new Date(body.dateOfJoining) : null) : undefined;
+  const effectiveDateOfJoining = resolvedDateOfJoining !== undefined ? resolvedDateOfJoining : existing.dateOfJoining;
 
-  const resolvedValidityFrom =
-    body.validityTo !== undefined
-      ? body.validityTo
-        ? effectiveDateOfJoining || new Date()
-        : null
-      : undefined;
-  const resolvedValidityTo =
-    body.validityTo !== undefined ? (body.validityTo ? new Date(body.validityTo) : null) : undefined;
+  const resolvedValidityFrom = body.validityTo !== undefined ? (body.validityTo ? effectiveDateOfJoining || new Date() : null) : undefined;
+  const resolvedValidityTo = body.validityTo !== undefined ? (body.validityTo ? new Date(body.validityTo) : null) : undefined;
 
   // Now that syncMemberActiveStatus never auto-reactivates (see that
   // function's comment), extending the expiry here — rather than through
@@ -289,17 +257,13 @@ export const updateMember = async (id, req) => {
   // on explicitly. Only recompute when validityTo actually moved, so
   // resaving the form without touching the date can't undo a manual
   // toggleMemberStatus deactivation.
-  const validityToChanged =
-    body.validityTo !== undefined &&
-    (existing.validityTo ? existing.validityTo.getTime() : null) !==
-      (resolvedValidityTo ? resolvedValidityTo.getTime() : null);
+  const validityToChanged = body.validityTo !== undefined && (existing.validityTo ? existing.validityTo.getTime() : null) !== (resolvedValidityTo ? resolvedValidityTo.getTime() : null);
 
   const data = {
     memberId: body.memberId !== undefined ? Number(body.memberId) : undefined,
     memberName: body.memberName,
     fatherName: body.fatherName,
-    dateOfBirth:
-      body.dateOfBirth !== undefined ? (body.dateOfBirth ? new Date(body.dateOfBirth) : null) : undefined,
+    dateOfBirth: body.dateOfBirth !== undefined ? (body.dateOfBirth ? new Date(body.dateOfBirth) : null) : undefined,
     photo,
     residentialAddress: body.residentialAddress,
     mobile: body.mobile,
@@ -332,14 +296,11 @@ export const updateMember = async (id, req) => {
   // MemberRenewal the same way create/renew do, but only when something
   // renewal-worthy actually happened, so routine field edits don't spam
   // the payment history with no-op entries.
-  const validityActuallyChanged =
-    resolvedValidityTo &&
-    (!existing.validityTo || resolvedValidityTo.getTime() !== new Date(existing.validityTo).getTime());
+  const validityActuallyChanged = resolvedValidityTo && (!existing.validityTo || resolvedValidityTo.getTime() !== new Date(existing.validityTo).getTime());
   const amountProvided = body.amount !== undefined && body.amount !== "";
   const renewalValidityFrom = resolvedValidityFrom ?? existing.validityFrom;
   const renewalValidityTo = resolvedValidityTo ?? existing.validityTo;
-  const shouldLogRenewal =
-    (validityActuallyChanged || amountProvided) && renewalValidityFrom && renewalValidityTo;
+  const shouldLogRenewal = (validityActuallyChanged || amountProvided) && renewalValidityFrom && renewalValidityTo;
 
   return prisma.$transaction(async (tx) => {
     const updated = await tx.member.update({
