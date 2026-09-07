@@ -164,7 +164,7 @@ export const getPublicMembers = async () => {
   const [, members] = await Promise.all([
     syncPromise,
     prisma.member.findMany({
-      where: { isActive: true },
+      // where: { isActive: true },
       select: {
         id: true,
         memberId: true,
