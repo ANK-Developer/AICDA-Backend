@@ -23,7 +23,6 @@ CREATE TABLE `Gallery` (
     `title` VARCHAR(191) NOT NULL,
     `description` VARCHAR(191) NULL,
     `imageUrl` VARCHAR(191) NOT NULL,
-    `publicId` VARCHAR(191) NOT NULL,
     `category` ENUM('ASSOCIATION', 'POLITICAL_ACHIEVEMENT', 'IMAGE', 'DIRECTORY', 'LETTER', 'BANNER') NOT NULL,
     `resourceType` ENUM('IMAGE', 'VIDEO') NOT NULL DEFAULT 'IMAGE',
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -38,6 +37,7 @@ CREATE TABLE `Member` (
     `memberId` INTEGER NOT NULL,
     `memberName` VARCHAR(191) NOT NULL,
     `fatherName` VARCHAR(191) NULL,
+    `dateOfBirth` DATETIME(3) NULL,
     `photo` VARCHAR(191) NULL,
     `residentialAddress` VARCHAR(191) NULL,
     `mobile` VARCHAR(191) NULL,
@@ -53,12 +53,16 @@ CREATE TABLE `Member` (
     `validityTo` DATETIME(3) NULL,
     `aadharNo` VARCHAR(191) NULL,
     `stateId` INTEGER NULL,
+    `district` VARCHAR(191) NULL,
     `cityId` INTEGER NULL,
     `isActive` BOOLEAN NOT NULL DEFAULT true,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 
     UNIQUE INDEX `Member_memberId_key`(`memberId`),
+    INDEX `Member_isActive_idx`(`isActive`),
+    INDEX `Member_stateId_idx`(`stateId`),
+    INDEX `Member_cityId_idx`(`cityId`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -114,6 +118,9 @@ CREATE TABLE `Partner` (
     `updatedAt` DATETIME(3) NOT NULL,
 
     UNIQUE INDEX `Partner_partnerId_key`(`partnerId`),
+    INDEX `Partner_isActive_idx`(`isActive`),
+    INDEX `Partner_stateId_idx`(`stateId`),
+    INDEX `Partner_cityId_idx`(`cityId`),
     UNIQUE INDEX `Partner_memberId_partnerNumber_key`(`memberId`, `partnerNumber`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -129,6 +136,7 @@ CREATE TABLE `MemberRenewal` (
     `note` VARCHAR(191) NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
+    INDEX `MemberRenewal_memberId_idx`(`memberId`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -143,6 +151,22 @@ CREATE TABLE `PartnerRenewal` (
     `note` VARCHAR(191) NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
+    INDEX `PartnerRenewal_partnerId_idx`(`partnerId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `ImportantDate` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `title` VARCHAR(191) NOT NULL,
+    `date` DATETIME(3) NOT NULL,
+    `description` VARCHAR(191) NULL,
+    `imageUrl` VARCHAR(191) NULL,
+    `imagePublicId` VARCHAR(191) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    INDEX `ImportantDate_date_idx`(`date`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -161,6 +185,8 @@ CREATE TABLE `Enquiry` (
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 
+    INDEX `Enquiry_status_idx`(`status`),
+    INDEX `Enquiry_createdAt_idx`(`createdAt`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
