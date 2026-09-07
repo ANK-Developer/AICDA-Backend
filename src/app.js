@@ -28,6 +28,7 @@ app.use(compression());
 // LAN IPs (e.g. 192.168.x.x:8080) are allowed dynamically since the dev
 // machine's address can change between networks/DHCP leases.
 const LAN_ORIGIN = /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:8080$/;
+
 app.use(
   cors({
     origin(origin, callback) {
