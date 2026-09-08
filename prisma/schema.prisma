@@ -8,45 +8,22 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  SUPER_ADMIN
-}
-
-enum GalleryCategory {
-  ASSOCIATION
-  POLITICAL_ACHIEVEMENT
-  IMAGE
-  DIRECTORY
-  LETTER
-  BANNER
-}
-
-enum GalleryResourceType {
-  IMAGE
-  VIDEO
-}
-
 model Admin {
-  id String @id @default(cuid())
-
-  firstName String
-  lastName  String
-
-  email String  @unique
-  phone String? @unique
-
-  password String
-
-  role     Role    @default(SUPER_ADMIN)
-  isActive Boolean @default(true)
-
+  id          String   @id @default(cuid())
+  firstName   String
+  lastName    String
+  email       String   @unique
+  phone       String?  @unique
+  password    String
+  role        Role     @default(SUPER_ADMIN)
+  isActive    Boolean  @default(true)
   createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   Admin?   @relation("AdminCreator", fields: [createdById], references: [id])
+  admins      Admin[]  @relation("AdminCreator")
 
-  createdBy Admin?  @relation("AdminCreator", fields: [createdById], references: [id])
-  admins    Admin[] @relation("AdminCreator")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  @@index([createdById], map: "Admin_createdById_fkey")
 }
 
 model Gallery {
@@ -54,17 +31,15 @@ model Gallery {
   title        String
   description  String?
   imageUrl     String
- 
   category     GalleryCategory
   resourceType GalleryResourceType @default(IMAGE)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
 }
 
 model Member {
-  id                   Int       @id @default(autoincrement())
-  memberId             Int       @unique
+  id                   Int             @id @default(autoincrement())
+  memberId             Int             @unique
   memberName           String
   fatherName           String?
   dateOfBirth          DateTime?
@@ -85,16 +60,13 @@ model Member {
   stateId              Int?
   district             String?
   cityId               Int?
-  isActive             Boolean   @default(true)
-
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
-
-  state                State?    @relation(fields: [stateId], references: [id])
-  city                 City?     @relation(fields: [cityId], references: [id])
-
-  partners             Partner[]
+  isActive             Boolean         @default(true)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  city                 City?           @relation(fields: [cityId], references: [id])
+  state                State?          @relation(fields: [stateId], references: [id])
   renewals             MemberRenewal[]
+  partners             Partner[]
 
   @@index([isActive])
   @@index([stateId])
@@ -102,43 +74,34 @@ model Member {
 }
 
 model State {
-  id        Int    @id @default(autoincrement())
-  stateName String @unique
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  members  Member[]
-  cities   City[]
-  partners Partner[]
+  id        Int       @id @default(autoincrement())
+  stateName String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  cities    City[]
+  members   Member[]
+  partners  Partner[]
 }
 
 model City {
-  id       Int    @id @default(autoincrement())
-  cityName String
-  stateId  Int
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  state    State     @relation(fields: [stateId], references: [id])
-  members  Member[]
-  partners Partner[]
+  id        Int       @id @default(autoincrement())
+  cityName  String
+  stateId   Int
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  state     State     @relation(fields: [stateId], references: [id])
+  members   Member[]
+  partners  Partner[]
 
   @@unique([cityName, stateId])
+  @@index([stateId], map: "City_stateId_fkey")
 }
+
 model Partner {
-  id Int @id @default(autoincrement())
-
-  // 123A, 123B, 123C...
-  partnerId     String @unique
-  partnerNumber Int
-
-  // Parent Member
-  memberId Int
-  member   Member @relation(fields: [memberId], references: [id])
-
-  // Partner's own information
+  id                   Int              @id @default(autoincrement())
+  partnerId            String           @unique
+  partnerNumber        Int
+  memberId             Int
   partnerName          String
   fatherName           String?
   photo                String?
@@ -148,32 +111,22 @@ model Partner {
   panCardNo            String?
   aadharNo             String?
   designation          String?
-
-  // Copied from Member initially,
-  // but editable independently
-  companyName      String?
-  companyAddress   String?
-  companyTelephone String?
-  packetNo         String?
-  stateId          Int?
-  cityId           Int?
-
-  dateOfJoining DateTime?
-
-  // Partner validity
-  validityFrom DateTime?
-  validityTo   DateTime?
-
-  // Backend controlled
-  isActive Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  state State? @relation(fields: [stateId], references: [id])
-  city  City?  @relation(fields: [cityId], references: [id])
-
-  renewals PartnerRenewal[]
+  companyName          String?
+  companyAddress       String?
+  companyTelephone     String?
+  packetNo             String?
+  stateId              Int?
+  cityId               Int?
+  dateOfJoining        DateTime?
+  validityFrom         DateTime?
+  validityTo           DateTime?
+  isActive             Boolean          @default(true)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  city                 City?            @relation(fields: [cityId], references: [id])
+  member               Member           @relation(fields: [memberId], references: [id])
+  state                State?           @relation(fields: [stateId], references: [id])
+  renewals             PartnerRenewal[]
 
   @@unique([memberId, partnerNumber])
   @@index([isActive])
@@ -181,65 +134,49 @@ model Partner {
   @@index([cityId])
 }
 
-// One immutable row per offline payment/renewal — never updated or deleted,
-// so admins can always answer "when did they pay and what did it cover?"
-// even after later renewals move the Member/Partner's own validity dates.
 model MemberRenewal {
-  id Int @id @default(autoincrement())
-
-  memberId Int
-  member   Member @relation(fields: [memberId], references: [id])
-
-  amount      Decimal? @db.Decimal(10, 2)
-  paymentDate DateTime @default(now())
-
+  id           Int      @id @default(autoincrement())
+  memberId     Int
+  amount       Decimal? @db.Decimal(10, 2)
+  paymentDate  DateTime @default(now())
   validityFrom DateTime
   validityTo   DateTime
-
-  note String?
-
-  createdAt DateTime @default(now())
+  note         String?
+  createdAt    DateTime @default(now())
+  member       Member   @relation(fields: [memberId], references: [id])
 
   @@index([memberId])
 }
 
 model PartnerRenewal {
-  id Int @id @default(autoincrement())
-
-  partnerId Int
-  partner   Partner @relation(fields: [partnerId], references: [id])
-
-  amount      Decimal? @db.Decimal(10, 2)
-  paymentDate DateTime @default(now())
-
+  id           Int      @id @default(autoincrement())
+  partnerId    Int
+  amount       Decimal? @db.Decimal(10, 2)
+  paymentDate  DateTime @default(now())
   validityFrom DateTime
   validityTo   DateTime
-
-  note String?
-
-  createdAt DateTime @default(now())
+  note         String?
+  createdAt    DateTime @default(now())
+  partner      Partner  @relation(fields: [partnerId], references: [id])
 
   @@index([partnerId])
 }
 
 model ImportantDate {
-  id Int @id @default(autoincrement())
-
+  id            Int      @id @default(autoincrement())
   title         String
   date          DateTime
   description   String?
   imageUrl      String?
   imagePublicId String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([date])
 }
 
 model Enquiry {
-  id Int @id @default(autoincrement())
-
+  id          Int      @id @default(autoincrement())
   requestType String
   fullName    String
   mobile      String
@@ -248,11 +185,28 @@ model Enquiry {
   city        String?
   state       String?
   message     String?
-  status      String  @default("pending")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([status])
   @@index([createdAt])
+}
+
+enum Role {
+  SUPER_ADMIN
+}
+
+enum GalleryCategory {
+  ASSOCIATION
+  POLITICAL_ACHIEVEMENT
+  IMAGE
+  DIRECTORY
+  LETTER
+  BANNER
+}
+
+enum GalleryResourceType {
+  IMAGE
+  VIDEO
 }
