@@ -1,6 +1,5 @@
 import * as partnerService from "../services/partner.service.js";
 
-
 // ======================================================
 // CREATE PARTNER
 // POST /api/v1/partners
@@ -8,9 +7,7 @@ import * as partnerService from "../services/partner.service.js";
 
 export const createPartner = async (req, res, next) => {
   try {
-    const photo = req.file
-      ? await partnerService.uploadPartnerPhoto(req.file)
-      : null;
+    const photo = req.file ? await partnerService.uploadPartnerPhoto(req.file) : null;
 
     const partner = await partnerService.createPartner({
       ...req.body,
@@ -33,7 +30,6 @@ export const createPartner = async (req, res, next) => {
     next(error);
   }
 };
-
 
 // ======================================================
 // GET PARTNER BY ID
@@ -63,7 +59,6 @@ export const getPartnerById = async (req, res, next) => {
   }
 };
 
-
 // ======================================================
 // GET ALL PARTNERS
 // GET /api/v1/partners
@@ -74,9 +69,7 @@ export const getPartnerById = async (req, res, next) => {
 
 export const getAllPartners = async (req, res, next) => {
   try {
-    const { partners, pagination } = await partnerService.getAllPartners(
-      req.query
-    );
+    const { partners, pagination } = await partnerService.getAllPartners(req.query);
 
     return res.status(200).json({
       success: true,
@@ -89,7 +82,26 @@ export const getAllPartners = async (req, res, next) => {
   }
 };
 
+// ======================================================
+// GET PUBLIC PARTNERS
+// GET /api/v1/partners/public
+// ======================================================
 
+export const getPublicPartners = async (req, res, next) => {
+  try {
+    const partners = await partnerService.getPublicPartners();
+
+    return res.status(200).json({
+      success: true,
+      message: "Public partners fetched successfully",
+      count: partners.length,
+      data: partners,
+    });
+  } catch (error) {
+    console.error("getPublicPartners error:", error);
+    next(error);
+  }
+};
 // ======================================================
 // GET PARTNERS BY MEMBER
 // GET /api/v1/partners/member/:memberId
@@ -118,7 +130,6 @@ export const getPartnersByMember = async (req, res, next) => {
   }
 };
 
-
 // ======================================================
 // UPDATE PARTNER
 // PATCH /api/v1/partners/:partnerId
@@ -128,9 +139,7 @@ export const updatePartner = async (req, res, next) => {
   try {
     const { partnerId } = req.params;
 
-    const photo = req.file
-      ? await partnerService.uploadPartnerPhoto(req.file)
-      : undefined;
+    const photo = req.file ? await partnerService.uploadPartnerPhoto(req.file) : undefined;
 
     const partner = await partnerService.updatePartner(partnerId, {
       ...req.body,
@@ -153,7 +162,6 @@ export const updatePartner = async (req, res, next) => {
     next(error);
   }
 };
-
 
 // ======================================================
 // TOGGLE PARTNER STATUS
@@ -183,7 +191,6 @@ export const togglePartnerStatus = async (req, res, next) => {
   }
 };
 
-
 // ======================================================
 // RENEW PARTNER
 // PATCH /api/v1/partners/:partnerId/renew
@@ -211,7 +218,6 @@ export const renewPartner = async (req, res, next) => {
     next(error);
   }
 };
-
 
 // ======================================================
 // DELETE PARTNER

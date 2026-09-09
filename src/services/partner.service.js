@@ -12,7 +12,6 @@ export const uploadPartnerPhoto = async (file) => {
   return uploaded.secure_url;
 };
 
-
 // Admin UIs act on the numeric primary key (like the member module does),
 // but the generated "123A" partnerId is also a valid, unique lookup — so
 // routes accept either without the caller needing to know which one it is.
@@ -20,13 +19,10 @@ const findPartnerRecord = (identifier, extra = {}) => {
   const isNumericId = /^\d+$/.test(String(identifier));
 
   return prisma.partner.findFirst({
-    where: isNumericId
-      ? { id: Number(identifier) }
-      : { partnerId: identifier },
+    where: isNumericId ? { id: Number(identifier) } : { partnerId: identifier },
     ...extra,
   });
 };
-
 
 // ======================================================
 // GENERATE PARTNER ID
@@ -71,9 +67,7 @@ export const generatePartnerId = async (memberId, tx = prisma) => {
     },
   });
 
-  const partnerNumber = lastPartner
-    ? lastPartner.partnerNumber + 1
-    : 1;
+  const partnerNumber = lastPartner ? lastPartner.partnerNumber + 1 : 1;
 
   const letters = numberToLetters(partnerNumber);
 
@@ -85,7 +79,6 @@ export const generatePartnerId = async (memberId, tx = prisma) => {
     partnerNumber,
   };
 };
-
 
 // ======================================================
 // CREATE PARTNER
@@ -130,9 +123,7 @@ export const createPartner = async (data) => {
 
   // Partner's own state/city if given, otherwise fall back to the Member's.
   const locationGiven = state !== undefined || city !== undefined;
-  const resolvedLocation = locationGiven
-    ? await resolveLocationIds(state, city)
-    : null;
+  const resolvedLocation = locationGiven ? await resolveLocationIds(state, city) : null;
 
   // Validity always starts from the joining date (or today, if none given)
   // — never trusted from the client. Only the expiry (validityTo) is
@@ -147,11 +138,7 @@ export const createPartner = async (data) => {
 
     try {
       return await prisma.$transaction(async (tx) => {
-        const {
-          member,
-          partnerId,
-          partnerNumber,
-        } = await generatePartnerId(memberId, tx);
+        const { member, partnerId, partnerNumber } = await generatePartnerId(memberId, tx);
 
         const partner = await tx.partner.create({
           data: {
@@ -181,26 +168,17 @@ export const createPartner = async (data) => {
             // Otherwise → copy Member value.
             // ------------------------------------------------
 
-            companyName:
-              companyName ?? member.companyName,
+            companyName: companyName ?? member.companyName,
 
-            companyAddress:
-              companyAddress ?? member.companyAddress,
+            companyAddress: companyAddress ?? member.companyAddress,
 
-            companyTelephone:
-              companyTelephone ??
-              member.companyTelephone,
+            companyTelephone: companyTelephone ?? member.companyTelephone,
 
-            packetNo:
-              packetNo ?? member.packetNo,
+            packetNo: packetNo ?? member.packetNo,
 
-            stateId: locationGiven
-              ? resolvedLocation.stateId
-              : member.stateId,
+            stateId: locationGiven ? resolvedLocation.stateId : member.stateId,
 
-            cityId: locationGiven
-              ? resolvedLocation.cityId
-              : member.cityId,
+            cityId: locationGiven ? resolvedLocation.cityId : member.cityId,
 
             // ------------------------------------------------
             // Dates — validityFrom is always backend-derived, never
@@ -211,9 +189,7 @@ export const createPartner = async (data) => {
 
             validityFrom: validityTo ? validityFrom : null,
 
-            validityTo: validityTo
-              ? new Date(validityTo)
-              : null,
+            validityTo: validityTo ? new Date(validityTo) : null,
 
             // Backend controls this
             isActive: true,
@@ -246,7 +222,6 @@ export const createPartner = async (data) => {
   }
 };
 
-
 // ======================================================
 // GET PARTNER BY ID
 // ======================================================
@@ -271,15 +246,12 @@ export const getPartnerById = async (identifier) => {
     }),
   ]);
 
-
   if (!partner) {
     throw new Error("Partner not found");
   }
 
-
   return partner;
 };
-
 
 // ======================================================
 // GET PARTNERS BY MEMBER
@@ -315,7 +287,6 @@ export const getPartnersByMember = async (memberId) => {
   });
 };
 
-
 // ======================================================
 // GET ALL PARTNERS
 //
@@ -327,40 +298,17 @@ export const getPartnersByMember = async (memberId) => {
 //   sortBy, order              → sorting
 // ======================================================
 
-const SORTABLE_PARTNER_FIELDS = [
-  "createdAt",
-  "updatedAt",
-  "partnerName",
-  "partnerId",
-  "dateOfJoining",
-  "validityFrom",
-  "validityTo",
-];
+const SORTABLE_PARTNER_FIELDS = ["createdAt", "updatedAt", "partnerName", "partnerId", "dateOfJoining", "validityFrom", "validityTo"];
 
 export const getAllPartners = async (query = {}) => {
   const syncPromise = syncPartnerActiveStatus();
 
-  const {
-    search,
-    status,
-    stateId,
-    cityId,
-    memberId,
-    page = 1,
-    limit = 10,
-    sortBy = "createdAt",
-    order = "desc",
-  } = query;
+  const { search, status, stateId, cityId, memberId, page = 1, limit = 10, sortBy = "createdAt", order = "desc" } = query;
 
   const where = {};
 
   if (search) {
-    where.OR = [
-      { partnerName: { contains: search } },
-      { partnerId: { contains: search } },
-      { mobile: { contains: search } },
-      { panCardNo: { contains: search } },
-    ];
+    where.OR = [{ partnerName: { contains: search } }, { partnerId: { contains: search } }, { mobile: { contains: search } }, { panCardNo: { contains: search } }];
   }
 
   if (status === "active") where.isActive = true;
@@ -381,9 +329,7 @@ export const getAllPartners = async (query = {}) => {
   const pageNumber = Math.max(Number(page) || 1, 1);
   const pageSize = Math.min(Math.max(Number(limit) || 10, 1), 100);
 
-  const sortField = SORTABLE_PARTNER_FIELDS.includes(sortBy)
-    ? sortBy
-    : "createdAt";
+  const sortField = SORTABLE_PARTNER_FIELDS.includes(sortBy) ? sortBy : "createdAt";
   const sortOrder = order === "asc" ? "asc" : "desc";
 
   const [, [partners, total]] = await Promise.all([
@@ -428,6 +374,33 @@ export const getAllPartners = async (query = {}) => {
   };
 };
 
+// ======================================================
+// GET PUBLIC PARTNERS
+// GET /api/v1/partners/public
+// ======================================================
+
+export const getPublicPartners = async () => {
+  await syncPartnerActiveStatus();
+
+  return prisma.partner.findMany({
+    where: {
+      isActive: true,
+    },
+    include: {
+      member: {
+        select: {
+          memberId: true,
+          memberName: true,
+        },
+      },
+      state: true,
+      city: true,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+};
 
 // ======================================================
 // AUTOMATIC ACTIVE / INACTIVE SWEEP
@@ -448,17 +421,11 @@ export const syncPartnerActiveStatus = async () => {
   await prisma.partner.updateMany({
     where: {
       isActive: true,
-      OR: [
-        { validityFrom: null },
-        { validityTo: null },
-        { validityFrom: { gt: now } },
-        { validityTo: { lt: now } },
-      ],
+      OR: [{ validityFrom: null }, { validityTo: null }, { validityFrom: { gt: now } }, { validityTo: { lt: now } }],
     },
     data: { isActive: false },
   });
 };
-
 
 // ======================================================
 // GET PARTNER STATUS
@@ -470,51 +437,37 @@ export const syncPartnerActiveStatus = async () => {
 // Inactive
 // ======================================================
 
-export const getPartnerStatus = (
-  validityFrom,
-  validityTo
-) => {
-
+export const getPartnerStatus = (validityFrom, validityTo) => {
   if (!validityFrom || !validityTo) {
     return "inactive";
   }
-
 
   const now = new Date();
 
   const from = new Date(validityFrom);
   const to = new Date(validityTo);
 
-
   if (now >= from && now <= to) {
     return "active";
   }
 
-
   return "inactive";
 };
-
 
 // ======================================================
 // UPDATE PARTNER
 // ======================================================
 
-export const updatePartner = async (
-  identifier,
-  data
-) => {
-
+export const updatePartner = async (identifier, data) => {
   // -----------------------------------------------
   // Check Partner exists
   // -----------------------------------------------
 
   const existingPartner = await findPartnerRecord(identifier);
 
-
   if (!existingPartner) {
     throw new Error("Partner not found");
   }
-
 
   // -----------------------------------------------
   // Allowed fields
@@ -549,54 +502,33 @@ export const updatePartner = async (
 
   // Only re-resolve state/city if the client actually sent one of them.
   const locationGiven = state !== undefined || city !== undefined;
-  const { stateId, cityId } = locationGiven
-    ? await resolveLocationIds(state, city)
-    : { stateId: undefined, cityId: undefined };
+  const { stateId, cityId } = locationGiven ? await resolveLocationIds(state, city) : { stateId: undefined, cityId: undefined };
 
   // validityFrom is never client-supplied — if validityTo is being changed
   // here (rather than through the dedicated renew endpoint), re-derive it
   // from the joining date the same way create does.
-  const resolvedDateOfJoining =
-    dateOfJoining !== undefined
-      ? dateOfJoining
-        ? new Date(dateOfJoining)
-        : null
-      : undefined;
-  const effectiveDateOfJoining =
-    resolvedDateOfJoining !== undefined ? resolvedDateOfJoining : existingPartner.dateOfJoining;
+  const resolvedDateOfJoining = dateOfJoining !== undefined ? (dateOfJoining ? new Date(dateOfJoining) : null) : undefined;
+  const effectiveDateOfJoining = resolvedDateOfJoining !== undefined ? resolvedDateOfJoining : existingPartner.dateOfJoining;
 
-  const resolvedValidityFrom =
-    validityTo !== undefined
-      ? validityTo
-        ? effectiveDateOfJoining || new Date()
-        : null
-      : undefined;
-  const resolvedValidityTo =
-    validityTo !== undefined ? (validityTo ? new Date(validityTo) : null) : undefined;
+  const resolvedValidityFrom = validityTo !== undefined ? (validityTo ? effectiveDateOfJoining || new Date() : null) : undefined;
+  const resolvedValidityTo = validityTo !== undefined ? (validityTo ? new Date(validityTo) : null) : undefined;
 
   // Whether this edit actually moves validityTo (vs. resaving the form with
   // the same date, or not touching it at all) — recomputing isActive below
   // is guarded by this so a manual togglePartnerStatus deactivation can't
   // get silently undone by an unrelated field edit.
-  const validityToChanged =
-    validityTo !== undefined &&
-    (existingPartner.validityTo ? existingPartner.validityTo.getTime() : null) !==
-      (resolvedValidityTo ? resolvedValidityTo.getTime() : null);
+  const validityToChanged = validityTo !== undefined && (existingPartner.validityTo ? existingPartner.validityTo.getTime() : null) !== (resolvedValidityTo ? resolvedValidityTo.getTime() : null);
 
   // Editing the partner (rather than using the dedicated /renew endpoint)
   // can also change validityTo or record an amount paid. Log a
   // PartnerRenewal the same way create/renew do, but only when something
   // renewal-worthy actually happened, so routine field edits don't spam
   // the payment history with no-op entries.
-  const validityActuallyChanged =
-    resolvedValidityTo &&
-    (!existingPartner.validityTo ||
-      resolvedValidityTo.getTime() !== new Date(existingPartner.validityTo).getTime());
+  const validityActuallyChanged = resolvedValidityTo && (!existingPartner.validityTo || resolvedValidityTo.getTime() !== new Date(existingPartner.validityTo).getTime());
   const amountProvided = amount !== undefined && amount !== "";
   const renewalValidityFrom = resolvedValidityFrom ?? existingPartner.validityFrom;
   const renewalValidityTo = resolvedValidityTo ?? existingPartner.validityTo;
-  const shouldLogRenewal =
-    (validityActuallyChanged || amountProvided) && renewalValidityFrom && renewalValidityTo;
+  const shouldLogRenewal = (validityActuallyChanged || amountProvided) && renewalValidityFrom && renewalValidityTo;
 
   // -----------------------------------------------
   // Update Partner
@@ -604,13 +536,11 @@ export const updatePartner = async (
 
   const updatedPartner = await prisma.$transaction(async (tx) => {
     const partner = await tx.partner.update({
-
       where: {
         id: existingPartner.id,
       },
 
       data: {
-
         partnerName,
         fatherName,
         photo,
@@ -666,7 +596,6 @@ export const updatePartner = async (
     return partner;
   });
 
-
   // Validity changed — recompute isActive immediately rather than waiting
   // for the next sweep so the response reflects the true status.
   if (validityToChanged) {
@@ -674,10 +603,8 @@ export const updatePartner = async (
     updatedPartner.isActive = recalculated.isActive;
   }
 
-
   return updatedPartner;
 };
-
 
 // ======================================================
 // RENEW PARTNER
@@ -733,7 +660,6 @@ export const renewPartner = async (identifier, data) => {
   });
 };
 
-
 // ======================================================
 // TOGGLE PARTNER STATUS (manual override)
 // ======================================================
@@ -763,7 +689,6 @@ export const togglePartnerStatus = async (identifier) => {
   });
 };
 
-
 // ======================================================
 // UPDATE PARTNER ACTIVE STATUS
 // ======================================================
@@ -772,22 +697,13 @@ export const togglePartnerStatus = async (identifier) => {
 // override above — Frontend should not send isActive on create/update.
 // ======================================================
 
-export const updatePartnerActiveStatus = async (
-  partner
-) => {
-
-  const status = getPartnerStatus(
-    partner.validityFrom,
-    partner.validityTo
-  );
-
+export const updatePartnerActiveStatus = async (partner) => {
+  const status = getPartnerStatus(partner.validityFrom, partner.validityTo);
 
   const isActive = status === "active";
 
-
   // Only update DB if necessary
   if (partner.isActive !== isActive) {
-
     return await prisma.partner.update({
       where: {
         id: partner.id,
@@ -797,13 +713,10 @@ export const updatePartnerActiveStatus = async (
         isActive,
       },
     });
-
   }
-
 
   return partner;
 };
-
 
 // ======================================================
 // DELETE PARTNER
