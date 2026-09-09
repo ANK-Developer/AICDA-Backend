@@ -1,7 +1,6 @@
 import prisma from "../config/prisma.js";
 import { resolveLocationIds } from "../utils/location.js";
-import { isValidToday, nextValidityFrom } from "../utils/validity.js";
-
+import { isValidToday, nextValidityFrom, endOfDayIST } from "../utils/validity.js";
 const getLocalPhotoPath = (file) => {
   if (!file) return null;
 
@@ -24,7 +23,7 @@ export const createMember = async (req) => {
   // admin-entered, when they record the offline payment.
   const dateOfJoining = body.dateOfJoining ? new Date(body.dateOfJoining) : null;
   const validityFrom = dateOfJoining || new Date();
-  const validityTo = body.validityTo ? new Date(body.validityTo) : null;
+  const validityTo = body.validityTo ? endOfDayIST(body.validityTo) : null;
 
   return prisma.$transaction(async (tx) => {
     const member = await tx.member.create({
@@ -82,9 +81,13 @@ export const syncMemberActiveStatus = async () => {
   await prisma.member.updateMany({
     where: {
       isActive: true,
-      OR: [{ validityTo: null }, { validityTo: { lt: now } }],
+      validityTo: {
+        lt: now,
+      },
     },
-    data: { isActive: false },
+    data: {
+      isActive: false,
+    },
   });
 };
 
@@ -249,8 +252,7 @@ export const updateMember = async (id, req) => {
   const effectiveDateOfJoining = resolvedDateOfJoining !== undefined ? resolvedDateOfJoining : existing.dateOfJoining;
 
   const resolvedValidityFrom = body.validityTo !== undefined ? (body.validityTo ? effectiveDateOfJoining || new Date() : null) : undefined;
-  const resolvedValidityTo = body.validityTo !== undefined ? (body.validityTo ? new Date(body.validityTo) : null) : undefined;
-
+  const resolvedValidityTo = body.validityTo !== undefined ? (body.validityTo ? endOfDayIST(body.validityTo) : null) : undefined;
   // Now that syncMemberActiveStatus never auto-reactivates (see that
   // function's comment), extending the expiry here — rather than through
   // /renew, which already sets isActive itself — has to flip isActive back
@@ -353,14 +355,17 @@ export const renewMember = async (id, req) => {
   }
 
   const { validityTo, amount, note } = req.body;
+
   const validityFrom = nextValidityFrom(member.validityTo);
+
+  const normalizedValidityTo = endOfDayIST(validityTo);
 
   return prisma.$transaction(async (tx) => {
     const renewed = await tx.member.update({
       where: { id: Number(id) },
       data: {
         validityFrom,
-        validityTo: new Date(validityTo),
+        validityTo: normalizedValidityTo,
         isActive: true,
       },
     });
@@ -370,7 +375,7 @@ export const renewMember = async (id, req) => {
         memberId: Number(id),
         amount: amount !== undefined && amount !== "" ? amount : null,
         validityFrom,
-        validityTo: new Date(validityTo),
+        validityTo: normalizedValidityTo,
         note: note || null,
       },
     });

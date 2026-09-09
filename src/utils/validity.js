@@ -27,3 +27,15 @@ export const nextValidityFrom = (previousValidityTo) => {
   next.setDate(next.getDate() + 1);
   return next;
 };
+
+export const endOfDayIST = (dateString) => {
+  if (!dateString) return null;
+
+  const date = new Date(`${dateString}T23:59:59.999+05:30`);
+
+  if (Number.isNaN(date.getTime())) {
+    throw new Error("Invalid validity date");
+  }
+
+  return date;
+};
