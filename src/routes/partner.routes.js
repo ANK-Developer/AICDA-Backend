@@ -1,6 +1,6 @@
 import express from "express";
 
-import { createPartner, deletePartner, getAllPartners, getPartnerById, getPartnersByMember, getPublicPartners, renewPartner, togglePartnerStatus, updatePartner } from "../controllers/partner.controller.js";
+import { createPartner, deletePartner, getAllPartners, getPartnerById, getPartnersByMember, getPublicPartnerById, getPublicPartners, renewPartner, togglePartnerStatus, updatePartner } from "../controllers/partner.controller.js";
 
 import { createPartnerSchema, renewPartnerSchema, updatePartnerSchema } from "../validation/partner.validation.js";
 
@@ -26,6 +26,8 @@ router.post("/", isAuthenticated, authorizeRoles("SUPER_ADMIN"), upload.single("
 router.get("/", isAuthenticated, authorizeRoles("SUPER_ADMIN"), getAllPartners);
 
 router.get("/public", getPublicPartners);
+
+router.get("/public/:id", getPublicPartnerById);
 
 // ======================================================
 // GET PARTNERS BY MEMBER

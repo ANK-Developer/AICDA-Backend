@@ -9,6 +9,7 @@ const router = express.Router();
 router.post("/", isAuthenticated, authorizeRoles("SUPER_ADMIN"), uploadGalleryMedia.single("photo"), validateMember, memberController.createMember);
 router.get("/", isAuthenticated, authorizeRoles("SUPER_ADMIN"), memberController.getAllMembers);
 router.get("/public", memberController.getPublicMembers);
+router.get("/public/:id", memberController.getPublicMemberById);
 router.get("/:id", isAuthenticated, authorizeRoles("SUPER_ADMIN"), memberController.getMemberById);
 router.put("/:id", isAuthenticated, authorizeRoles("SUPER_ADMIN"), uploadGalleryMedia.single("photo"), validateMember, memberController.updateMember);
 router.patch("/:id/status", isAuthenticated, authorizeRoles("SUPER_ADMIN"), memberController.toggleMemberStatus);

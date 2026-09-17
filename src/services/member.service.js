@@ -201,6 +201,66 @@ export const getPublicMembers = async () => {
   }));
 };
 
+// ======================================================
+// GET PUBLIC MEMBER BY ID
+// GET /api/v1/members/public/:id
+//
+// Same safe field selection as getPublicMembers (no PAN/Aadhaar/DOB),
+// plus the member's partners so a shared link shows the full picture.
+// ======================================================
+
+export const getPublicMemberById = async (id) => {
+  const [, member] = await Promise.all([
+    syncMemberActiveStatus(),
+    prisma.member.findUnique({
+      where: { id: Number(id) },
+      select: {
+        id: true,
+        memberId: true,
+        memberName: true,
+        fatherName: true,
+        designation: true,
+        companyName: true,
+        companyAddress: true,
+        companyTelephone: true,
+        residentialAddress: true,
+        residentialTelephone: true,
+        packetNo: true,
+        dateOfJoining: true,
+        validityFrom: true,
+        validityTo: true,
+        mobile: true,
+        photo: true,
+        isActive: true,
+        state: { select: { stateName: true } },
+        city: { select: { cityName: true } },
+        partners: {
+          select: {
+            id: true,
+            partnerId: true,
+            partnerName: true,
+            designation: true,
+            companyName: true,
+            mobile: true,
+            photo: true,
+            isActive: true,
+            validityTo: true,
+          },
+          orderBy: { partnerNumber: "asc" },
+        },
+      },
+    }),
+  ]);
+
+  if (!member) return null;
+
+  return {
+    ...member,
+    state: member.state?.stateName ?? null,
+    city: member.city?.cityName ?? null,
+  };
+};
+
 // Includes partners and renewal (payment) history so the admin details page
 // can answer "who are their partners" and "when did they pay / renew".
 export const getMemberById = async (id) => {

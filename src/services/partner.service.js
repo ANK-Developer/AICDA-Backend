@@ -377,29 +377,80 @@ export const getAllPartners = async (query = {}) => {
 // ======================================================
 // GET PUBLIC PARTNERS
 // GET /api/v1/partners/public
+//
+// Public-safe field selection only — no panCardNo / aadharNo, which
+// `include` used to leak here (unlike getPublicMembers's `select`).
 // ======================================================
+
+const PUBLIC_PARTNER_SELECT = {
+  id: true,
+  partnerId: true,
+  partnerName: true,
+  fatherName: true,
+  designation: true,
+  companyName: true,
+  companyAddress: true,
+  companyTelephone: true,
+  residentialAddress: true,
+  residentialTelephone: true,
+  packetNo: true,
+  dateOfJoining: true,
+  validityFrom: true,
+  validityTo: true,
+  mobile: true,
+  photo: true,
+  isActive: true,
+  member: {
+    select: {
+      id: true,
+      memberId: true,
+      memberName: true,
+    },
+  },
+  state: { select: { stateName: true } },
+  city: { select: { cityName: true } },
+};
+
+const withPublicPartnerLocation = (partner) => ({
+  ...partner,
+  state: partner.state?.stateName ?? null,
+  city: partner.city?.cityName ?? null,
+});
 
 export const getPublicPartners = async () => {
   await syncPartnerActiveStatus();
 
-  return prisma.partner.findMany({
+  const partners = await prisma.partner.findMany({
     where: {
       isActive: true,
     },
-    include: {
-      member: {
-        select: {
-          memberId: true,
-          memberName: true,
-        },
-      },
-      state: true,
-      city: true,
-    },
+    select: PUBLIC_PARTNER_SELECT,
     orderBy: {
       createdAt: "desc",
     },
   });
+
+  return partners.map(withPublicPartnerLocation);
+};
+
+// ======================================================
+// GET PUBLIC PARTNER BY ID
+// GET /api/v1/partners/public/:id
+// ======================================================
+
+export const getPublicPartnerById = async (identifier) => {
+  await syncPartnerActiveStatus();
+
+  const isNumericId = /^\d+$/.test(String(identifier));
+
+  const partner = await prisma.partner.findFirst({
+    where: isNumericId ? { id: Number(identifier) } : { partnerId: identifier },
+    select: PUBLIC_PARTNER_SELECT,
+  });
+
+  if (!partner) return null;
+
+  return withPublicPartnerLocation(partner);
 };
 
 // ======================================================
