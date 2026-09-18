@@ -1,16 +1,6 @@
 import prisma from "../config/prisma.js";
-import { uploadBufferToCloudinary } from "../config/cloudinary.js";
 import { resolveLocationIds } from "../utils/location.js";
 import { nextValidityFrom } from "../utils/validity.js";
-
-export const uploadPartnerPhoto = async (file) => {
-  if (!file) return null;
-  const uploaded = await uploadBufferToCloudinary(file.buffer, {
-    folder: "aicda/partners",
-    resource_type: "image",
-  });
-  return uploaded.secure_url;
-};
 
 // Admin UIs act on the numeric primary key (like the member module does),
 // but the generated "123A" partnerId is also a valid, unique lookup — so
