@@ -1,5 +1,14 @@
 import * as partnerService from "../services/partner.service.js";
 
+// Local disk upload (multer diskStorage under src/uploads) — same approach
+// as member.service.js's getLocalPhotoPath, so partner photos are served
+// the same way member photos are instead of going through Cloudinary.
+const getLocalPhotoPath = (file) => {
+  if (!file) return null;
+
+  return `/uploads/${file.filename}`;
+};
+
 // ======================================================
 // CREATE PARTNER
 // POST /api/v1/partners
@@ -7,7 +16,7 @@ import * as partnerService from "../services/partner.service.js";
 
 export const createPartner = async (req, res, next) => {
   try {
-    const photo = req.file ? await partnerService.uploadPartnerPhoto(req.file) : null;
+    const photo = req.file ? getLocalPhotoPath(req.file) : null;
 
     const partner = await partnerService.createPartner({
       ...req.body,
@@ -166,7 +175,7 @@ export const updatePartner = async (req, res, next) => {
   try {
     const { partnerId } = req.params;
 
-    const photo = req.file ? await partnerService.uploadPartnerPhoto(req.file) : undefined;
+    const photo = req.file ? getLocalPhotoPath(req.file) : undefined;
 
     const partner = await partnerService.updatePartner(partnerId, {
       ...req.body,

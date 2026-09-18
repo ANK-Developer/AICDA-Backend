@@ -5,7 +5,7 @@ import { createPartner, deletePartner, getAllPartners, getPartnerById, getPartne
 import { createPartnerSchema, renewPartnerSchema, updatePartnerSchema } from "../validation/partner.validation.js";
 
 import { validate } from "../middlewares/validate.js";
-import upload from "../middlewares/upload.middleware.js";
+import { uploadGalleryMedia } from "../middlewares/upload.middleware.js";
 import { isAuthenticated } from "../middlewares/auth.middleware.js";
 import { authorizeRoles } from "../middlewares/superAdmin.middlewares.js";
 
@@ -16,7 +16,7 @@ const router = express.Router();
 // POST /api/v1/partners
 // ======================================================
 
-router.post("/", isAuthenticated, authorizeRoles("SUPER_ADMIN"), upload.single("photo"), validate(createPartnerSchema), createPartner);
+router.post("/", isAuthenticated, authorizeRoles("SUPER_ADMIN"), uploadGalleryMedia.single("photo"), validate(createPartnerSchema), createPartner);
 
 // ======================================================
 // GET ALL PARTNERS
@@ -51,7 +51,7 @@ router.get("/:partnerId", isAuthenticated, authorizeRoles("SUPER_ADMIN"), getPar
 // PATCH /api/v1/partners/:partnerId
 // ======================================================
 
-router.patch("/:partnerId", isAuthenticated, authorizeRoles("SUPER_ADMIN"), upload.single("photo"), validate(updatePartnerSchema), updatePartner);
+router.patch("/:partnerId", isAuthenticated, authorizeRoles("SUPER_ADMIN"), uploadGalleryMedia.single("photo"), validate(updatePartnerSchema), updatePartner);
 
 // ======================================================
 // TOGGLE PARTNER STATUS
