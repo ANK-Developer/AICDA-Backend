@@ -21,6 +21,16 @@ export const validateMember=[
     .isISO8601()
     .withMessage("Invalid Date of Birth"),
 
+  body("specialDate")
+    .optional({ values: "falsy" })
+    .isISO8601()
+    .withMessage("Invalid Special Date"),
+
+  body("specialDateNote")
+    .optional()
+    .isLength({ max: 191 })
+    .withMessage("Special Date note must be 191 characters or fewer"),
+
   body("aadharNo")
     .optional()
     .isLength({ min: 12, max: 12 })

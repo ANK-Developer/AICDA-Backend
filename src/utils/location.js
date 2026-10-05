@@ -36,10 +36,21 @@ export const resolveLocationIds = async (stateName, cityName) => {
 // existing City table (across all states) rather than a canonical external
 // dataset. Freeform entry is still allowed on the form; new city names get
 // upserted the same way on save.
-export const searchCities = async (search) => {
+//
+// `state` narrows to that state's cities. `district` narrows further to cities
+// already used by a Member in that district (or a Partner of one) — City itself
+// has no district column.
+export const searchCities = async (search, state, district) => {
+  const where = {};
+  if (search) where.cityName = { contains: search };
+  if (state) where.state = { stateName: state };
+  if (district) {
+    where.OR = [{ members: { some: { district } } }, { partners: { some: { member: { district } } } }];
+  }
+
   return prisma.city.findMany({
-    where: search ? { cityName: { contains: search } } : {},
-    take: 10,
+    where,
+    take: 100,
     orderBy: { cityName: "asc" },
   });
 };

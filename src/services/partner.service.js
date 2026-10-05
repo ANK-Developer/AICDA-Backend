@@ -87,6 +87,9 @@ export const createPartner = async (data) => {
 
     partnerName,
     fatherName,
+    dateOfBirth,
+    specialDate,
+    specialDateNote,
     photo,
     residentialAddress,
     mobile,
@@ -102,6 +105,7 @@ export const createPartner = async (data) => {
     packetNo,
 
     state,
+    district,
     city,
 
     dateOfJoining,
@@ -142,6 +146,9 @@ export const createPartner = async (data) => {
             // Partner information
             partnerName,
             fatherName,
+            dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+            specialDate: specialDate ? new Date(specialDate) : null,
+            specialDateNote: specialDateNote || null,
             photo,
             residentialAddress,
             mobile,
@@ -167,6 +174,8 @@ export const createPartner = async (data) => {
             packetNo: packetNo ?? member.packetNo,
 
             stateId: locationGiven ? resolvedLocation.stateId : member.stateId,
+
+            district: district !== undefined ? district || null : member.district,
 
             cityId: locationGiven ? resolvedLocation.cityId : member.cityId,
 
@@ -517,6 +526,9 @@ export const updatePartner = async (identifier, data) => {
   const {
     partnerName,
     fatherName,
+    dateOfBirth,
+    specialDate,
+    specialDateNote,
     photo,
     residentialAddress,
     mobile,
@@ -532,6 +544,7 @@ export const updatePartner = async (identifier, data) => {
     packetNo,
 
     state,
+    district,
     city,
 
     dateOfJoining,
@@ -584,6 +597,9 @@ export const updatePartner = async (identifier, data) => {
       data: {
         partnerName,
         fatherName,
+        dateOfBirth: dateOfBirth !== undefined ? (dateOfBirth ? new Date(dateOfBirth) : null) : undefined,
+        specialDate: specialDate !== undefined ? (specialDate ? new Date(specialDate) : null) : undefined,
+        specialDateNote,
         photo,
         residentialAddress,
         mobile,
@@ -600,6 +616,7 @@ export const updatePartner = async (identifier, data) => {
         packetNo,
 
         stateId,
+        district,
         cityId,
 
         dateOfJoining: resolvedDateOfJoining,

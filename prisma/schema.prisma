@@ -43,6 +43,8 @@ model Member {
   memberName           String
   fatherName           String?
   dateOfBirth          DateTime?
+  specialDate          DateTime?
+  specialDateNote      String?
   photo                String?
   residentialAddress   String?
   mobile               String?
@@ -104,6 +106,9 @@ model Partner {
   memberId             Int
   partnerName          String
   fatherName           String?
+  dateOfBirth          DateTime?
+  specialDate          DateTime?
+  specialDateNote      String?
   photo                String?
   residentialAddress   String?
   mobile               String?
@@ -116,6 +121,7 @@ model Partner {
   companyTelephone     String?
   packetNo             String?
   stateId              Int?
+  district             String?
   cityId               Int?
   dateOfJoining        DateTime?
   validityFrom         DateTime?
