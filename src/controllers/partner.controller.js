@@ -281,3 +281,67 @@ export const deletePartner = async (req, res, next) => {
     next(error);
   }
 };
+
+// ======================================================
+// SPECIAL DATES
+// POST   /api/v1/partners/:partnerId/special-dates
+// DELETE /api/v1/partners/:partnerId/special-dates/:dateId
+// ======================================================
+
+const NOT_FOUND_MESSAGES = ["Partner not found", "Special date not found"];
+
+export const addPartnerSpecialDate = async (req, res, next) => {
+  try {
+    const result = await partnerService.addPartnerSpecialDate(req.params.partnerId, req.body);
+
+    return res.status(201).json({
+      success: true,
+      message: "Special date added successfully",
+      data: result.specialDates,
+    });
+  } catch (error) {
+    if (NOT_FOUND_MESSAGES.includes(error.message)) {
+      return res.status(404).json({ success: false, message: error.message });
+    }
+
+    next(error);
+  }
+};
+
+export const deletePartnerSpecialDate = async (req, res, next) => {
+  try {
+    const { partnerId, dateId } = req.params;
+    const result = await partnerService.deletePartnerSpecialDate(partnerId, dateId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Special date deleted successfully",
+      data: result.specialDates,
+    });
+  } catch (error) {
+    if (NOT_FOUND_MESSAGES.includes(error.message)) {
+      return res.status(404).json({ success: false, message: error.message });
+    }
+
+    next(error);
+  }
+};
+
+export const updatePartnerSpecialDate = async (req, res, next) => {
+  try {
+    const { partnerId, dateId } = req.params;
+    const result = await partnerService.updatePartnerSpecialDate(partnerId, dateId, req.body);
+
+    return res.status(200).json({
+      success: true,
+      message: "Special date updated successfully",
+      data: result.specialDates,
+    });
+  } catch (error) {
+    if (NOT_FOUND_MESSAGES.includes(error.message)) {
+      return res.status(404).json({ success: false, message: error.message });
+    }
+
+    next(error);
+  }
+};

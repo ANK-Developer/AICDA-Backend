@@ -12,6 +12,8 @@ export const createPartnerSchema = Joi.object({
   }),
 
   fatherName: Joi.string().max(150).allow("").optional(),
+  dateOfBirth: Joi.date().iso().allow("").optional(),
+  specialDates: Joi.string().allow("").optional(),
   residentialAddress: Joi.string().allow("").optional(),
 
   mobile: Joi.string()
@@ -44,6 +46,7 @@ export const createPartnerSchema = Joi.object({
   packetNo: Joi.string().allow("").optional(),
 
   state: Joi.string().max(100).allow("").optional(),
+  district: Joi.string().max(100).allow("").optional(),
   city: Joi.string().max(100).allow("").optional(),
 
   dateOfJoining: Joi.date().iso().allow("").optional(),

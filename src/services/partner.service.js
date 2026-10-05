@@ -1,6 +1,7 @@
 import prisma from "../config/prisma.js";
 import { resolveLocationIds } from "../utils/location.js";
 import { nextValidityFrom } from "../utils/validity.js";
+import { asSpecialDateList, buildSpecialDate, parseSpecialDates, updateSpecialDateInList } from "../utils/specialDates.js";
 
 // Admin UIs act on the numeric primary key (like the member module does),
 // but the generated "123A" partnerId is also a valid, unique lookup — so
@@ -87,6 +88,8 @@ export const createPartner = async (data) => {
 
     partnerName,
     fatherName,
+    dateOfBirth,
+    specialDates,
     photo,
     residentialAddress,
     mobile,
@@ -102,6 +105,7 @@ export const createPartner = async (data) => {
     packetNo,
 
     state,
+    district,
     city,
 
     dateOfJoining,
@@ -142,6 +146,8 @@ export const createPartner = async (data) => {
             // Partner information
             partnerName,
             fatherName,
+            dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+            specialDates: parseSpecialDates(specialDates) ?? [],
             photo,
             residentialAddress,
             mobile,
@@ -167,6 +173,8 @@ export const createPartner = async (data) => {
             packetNo: packetNo ?? member.packetNo,
 
             stateId: locationGiven ? resolvedLocation.stateId : member.stateId,
+
+            district: district !== undefined ? district || null : member.district,
 
             cityId: locationGiven ? resolvedLocation.cityId : member.cityId,
 
@@ -411,9 +419,6 @@ export const getPublicPartners = async () => {
   await syncPartnerActiveStatus();
 
   const partners = await prisma.partner.findMany({
-    where: {
-      isActive: true,
-    },
     select: PUBLIC_PARTNER_SELECT,
     orderBy: {
       createdAt: "desc",
@@ -517,6 +522,8 @@ export const updatePartner = async (identifier, data) => {
   const {
     partnerName,
     fatherName,
+    dateOfBirth,
+    specialDates,
     photo,
     residentialAddress,
     mobile,
@@ -532,6 +539,7 @@ export const updatePartner = async (identifier, data) => {
     packetNo,
 
     state,
+    district,
     city,
 
     dateOfJoining,
@@ -584,6 +592,8 @@ export const updatePartner = async (identifier, data) => {
       data: {
         partnerName,
         fatherName,
+        dateOfBirth: dateOfBirth !== undefined ? (dateOfBirth ? new Date(dateOfBirth) : null) : undefined,
+        specialDates: parseSpecialDates(specialDates),
         photo,
         residentialAddress,
         mobile,
@@ -600,6 +610,7 @@ export const updatePartner = async (identifier, data) => {
         packetNo,
 
         stateId,
+        district,
         cityId,
 
         dateOfJoining: resolvedDateOfJoining,
@@ -774,5 +785,59 @@ export const deletePartner = async (identifier) => {
     where: {
       id: existingPartner.id,
     },
+  });
+};
+
+// ======================================================
+// SPECIAL DATES
+// ======================================================
+
+const findPartnerSpecialDates = async (identifier) => {
+  const partner = await findPartnerRecord(identifier, { select: { id: true, specialDates: true } });
+
+  if (!partner) {
+    throw new Error("Partner not found");
+  }
+
+  return { id: partner.id, specialDates: asSpecialDateList(partner.specialDates) };
+};
+
+export const addPartnerSpecialDate = async (identifier, body) => {
+  const { id, specialDates } = await findPartnerSpecialDates(identifier);
+
+  return prisma.partner.update({
+    where: { id },
+    data: { specialDates: [...specialDates, buildSpecialDate(body)] },
+    select: { specialDates: true },
+  });
+};
+
+export const deletePartnerSpecialDate = async (identifier, dateId) => {
+  const { id, specialDates } = await findPartnerSpecialDates(identifier);
+  const remaining = specialDates.filter((entry) => entry.id !== dateId);
+
+  if (remaining.length === specialDates.length) {
+    throw new Error("Special date not found");
+  }
+
+  return prisma.partner.update({
+    where: { id },
+    data: { specialDates: remaining },
+    select: { specialDates: true },
+  });
+};
+
+export const updatePartnerSpecialDate = async (identifier, dateId, body) => {
+  const { id, specialDates } = await findPartnerSpecialDates(identifier);
+  const updated = updateSpecialDateInList(specialDates, dateId, body);
+
+  if (!updated) {
+    throw new Error("Special date not found");
+  }
+
+  return prisma.partner.update({
+    where: { id },
+    data: { specialDates: updated },
+    select: { specialDates: true },
   });
 };

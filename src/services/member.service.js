@@ -1,6 +1,7 @@
 import prisma from "../config/prisma.js";
 import { resolveLocationIds } from "../utils/location.js";
 import { isValidToday, nextValidityFrom, endOfDayIST } from "../utils/validity.js";
+import { asSpecialDateList, buildSpecialDate, parseSpecialDates, updateSpecialDateInList } from "../utils/specialDates.js";
 const getLocalPhotoPath = (file) => {
   if (!file) return null;
 
@@ -32,6 +33,7 @@ export const createMember = async (req) => {
         memberName: body.memberName,
         fatherName: body.fatherName || null,
         dateOfBirth: body.dateOfBirth ? new Date(body.dateOfBirth) : null,
+        specialDates: parseSpecialDates(body.specialDates) ?? [],
         photo,
         residentialAddress: body.residentialAddress || null,
         mobile: body.mobile || null,
@@ -185,6 +187,7 @@ export const getPublicMembers = async () => {
         validityTo: true,
         mobile: true,
         photo: true,
+        isActive: true,
         state: { select: { stateName: true } },
         city: { select: { cityName: true } },
       },
@@ -326,6 +329,7 @@ export const updateMember = async (id, req) => {
     memberName: body.memberName,
     fatherName: body.fatherName,
     dateOfBirth: body.dateOfBirth !== undefined ? (body.dateOfBirth ? new Date(body.dateOfBirth) : null) : undefined,
+    specialDates: parseSpecialDates(body.specialDates),
     photo,
     residentialAddress: body.residentialAddress,
     mobile: body.mobile,
@@ -444,45 +448,6 @@ export const renewMember = async (id, req) => {
   });
 };
 
-// Active members whose birthday (month/day) falls within the next 7 days,
-// including today — backs the admin Important Dates panel's birthday
-// reminders. Only active members are considered, since an expired
-// membership isn't worth reminding the admin about.
-export const getUpcomingBirthdays = async () => {
-  const members = await prisma.member.findMany({
-    where: {
-      isActive: true,
-      dateOfBirth: { not: null },
-    },
-    select: {
-      id: true,
-      memberId: true,
-      memberName: true,
-      dateOfBirth: true,
-      photo: true,
-    },
-  });
-
-  const today = new Date();
-  const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-  return members
-    .map((member) => {
-      const dob = new Date(member.dateOfBirth);
-
-      let nextBirthday = new Date(todayOnly.getFullYear(), dob.getMonth(), dob.getDate());
-      if (nextBirthday < todayOnly) {
-        nextBirthday = new Date(todayOnly.getFullYear() + 1, dob.getMonth(), dob.getDate());
-      }
-
-      const daysLeft = Math.round((nextBirthday - todayOnly) / (1000 * 60 * 60 * 24));
-
-      return { ...member, nextBirthday, daysLeft };
-    })
-    .filter((member) => member.daysLeft <= 7)
-    .sort((a, b) => a.daysLeft - b.daysLeft);
-};
-
 export const deleteMember = async (id) => {
   const existing = await prisma.member.findUnique({ where: { id: Number(id) } });
 
@@ -494,5 +459,63 @@ export const deleteMember = async (id) => {
 
   return prisma.member.delete({
     where: { id: Number(id) },
+  });
+};
+
+const findMemberSpecialDates = async (id) => {
+  const member = await prisma.member.findUnique({
+    where: { id: Number(id) },
+    select: { specialDates: true },
+  });
+
+  if (!member) {
+    const error = new Error("Member not found");
+    error.status = 404;
+    throw error;
+  }
+
+  return asSpecialDateList(member.specialDates);
+};
+
+export const addMemberSpecialDate = async (id, body) => {
+  const specialDates = [...(await findMemberSpecialDates(id)), buildSpecialDate(body)];
+
+  return prisma.member.update({
+    where: { id: Number(id) },
+    data: { specialDates },
+    select: { specialDates: true },
+  });
+};
+
+export const deleteMemberSpecialDate = async (id, dateId) => {
+  const current = await findMemberSpecialDates(id);
+  const specialDates = current.filter((entry) => entry.id !== dateId);
+
+  if (specialDates.length === current.length) {
+    const error = new Error("Special date not found");
+    error.status = 404;
+    throw error;
+  }
+
+  return prisma.member.update({
+    where: { id: Number(id) },
+    data: { specialDates },
+    select: { specialDates: true },
+  });
+};
+
+export const updateMemberSpecialDate = async (id, dateId, body) => {
+  const specialDates = updateSpecialDateInList(await findMemberSpecialDates(id), dateId, body);
+
+  if (!specialDates) {
+    const error = new Error("Special date not found");
+    error.status = 404;
+    throw error;
+  }
+
+  return prisma.member.update({
+    where: { id: Number(id) },
+    data: { specialDates },
+    select: { specialDates: true },
   });
 };

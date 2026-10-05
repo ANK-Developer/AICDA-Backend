@@ -133,3 +133,45 @@ export const deleteMember = async (req, res, next) => {
     next(error);
   }
 };
+
+export const addMemberSpecialDate = async (req, res, next) => {
+  try {
+    const result = await memberService.addMemberSpecialDate(req.params.id, req.body);
+
+    res.status(201).json({
+      success: true,
+      message: "Special date added successfully",
+      data: result.specialDates,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteMemberSpecialDate = async (req, res, next) => {
+  try {
+    const result = await memberService.deleteMemberSpecialDate(req.params.id, req.params.dateId);
+
+    res.status(200).json({
+      success: true,
+      message: "Special date deleted successfully",
+      data: result.specialDates,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateMemberSpecialDate = async (req, res, next) => {
+  try {
+    const result = await memberService.updateMemberSpecialDate(req.params.id, req.params.dateId, req.body);
+
+    res.status(200).json({
+      success: true,
+      message: "Special date updated successfully",
+      data: result.specialDates,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

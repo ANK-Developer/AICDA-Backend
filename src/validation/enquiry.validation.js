@@ -29,3 +29,11 @@ export const enquiryValidation = Joi.object({
 
   message: Joi.string().max(1000).allow("").optional(),
 });
+
+
+export const enquiryStatusValidation = Joi.object({
+  status: Joi.string().valid("NEW", "IN_PROGRESS", "RESOLVED", "CLOSED").required().messages({
+    "any.required": "Status is required",
+    "any.only": "Status must be NEW, IN_PROGRESS, RESOLVED or CLOSED",
+  }),
+});

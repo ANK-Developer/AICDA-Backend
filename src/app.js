@@ -31,7 +31,7 @@ const LAN_ORIGIN = /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:8080$/;
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || origin === "http://localhost:8080" || origin === process.env.Frontend_URL || LAN_ORIGIN.test(origin)) {
+      if (!origin || origin === "http://localhost:5173" || origin === process.env.Frontend_URL || LAN_ORIGIN.test(origin)) {
         callback(null, true);
       } else {
         callback(new Error("Not allowed by CORS"));

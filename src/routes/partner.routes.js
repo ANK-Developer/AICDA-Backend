@@ -1,10 +1,11 @@
 import express from "express";
 
-import { createPartner, deletePartner, getAllPartners, getPartnerById, getPartnersByMember, getPublicPartnerById, getPublicPartners, renewPartner, togglePartnerStatus, updatePartner } from "../controllers/partner.controller.js";
+import { addPartnerSpecialDate, createPartner, deletePartner, deletePartnerSpecialDate, getAllPartners, getPartnerById, getPartnersByMember, getPublicPartnerById, getPublicPartners, renewPartner, togglePartnerStatus, updatePartner, updatePartnerSpecialDate } from "../controllers/partner.controller.js";
 
 import { createPartnerSchema, renewPartnerSchema, updatePartnerSchema } from "../validation/partner.validation.js";
 
 import { validate } from "../middlewares/validate.js";
+import { specialDateSchema } from "../validation/specialDate.validation.js";
 import { uploadGalleryMedia } from "../middlewares/upload.middleware.js";
 import { isAuthenticated } from "../middlewares/auth.middleware.js";
 import { authorizeRoles } from "../middlewares/superAdmin.middlewares.js";
@@ -66,6 +67,18 @@ router.patch("/:partnerId/status", isAuthenticated, authorizeRoles("SUPER_ADMIN"
 // ======================================================
 
 router.patch("/:partnerId/renew", isAuthenticated, authorizeRoles("SUPER_ADMIN"), validate(renewPartnerSchema), renewPartner);
+
+// ======================================================
+// SPECIAL DATES
+// POST   /api/v1/partners/:partnerId/special-dates
+// DELETE /api/v1/partners/:partnerId/special-dates/:dateId
+// ======================================================
+
+router.post("/:partnerId/special-dates", isAuthenticated, authorizeRoles("SUPER_ADMIN"), validate(specialDateSchema), addPartnerSpecialDate);
+
+router.put("/:partnerId/special-dates/:dateId", isAuthenticated, authorizeRoles("SUPER_ADMIN"), validate(specialDateSchema), updatePartnerSpecialDate);
+
+router.delete("/:partnerId/special-dates/:dateId", isAuthenticated, authorizeRoles("SUPER_ADMIN"), deletePartnerSpecialDate);
 
 // ======================================================
 // DELETE PARTNER
