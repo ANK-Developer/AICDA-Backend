@@ -19,14 +19,18 @@ export const submitEnquiry = async (req, res) => {
   }
 };
 
+// GET /api/v1/enquiries
+// Query: page, limit, search, status
 export const getEnquiries = async (req, res) => {
   try {
-    const enquiries = await enquiryService.getAllEnquiries();
+    const { enquiries, stats, pagination } = await enquiryService.getAllEnquiries(req.query);
 
     return res.status(200).json({
       success: true,
-      count: enquiries.length,
+      count: pagination.total,
       enquiries,
+      stats,
+      pagination,
     });
   } catch (error) {
     console.error("Get enquiries error:", error);
@@ -38,20 +42,26 @@ export const getEnquiries = async (req, res) => {
   }
 };
 
-export const removeEnquiry = async (req, res) => {
+// PATCH /api/v1/enquiries/:id/status   body: { status }
+export const changeEnquiryStatus = async (req, res) => {
   try {
-    await enquiryService.deleteEnquiry(req.params.id);
+    const enquiry = await enquiryService.updateEnquiryStatus(req.params.id, req.body.status);
 
     return res.status(200).json({
       success: true,
-      message: "Enquiry deleted successfully",
+      message: "Enquiry status updated successfully",
+      data: enquiry,
     });
   } catch (error) {
-    console.error("Delete enquiry error:", error);
+    if (error.status === 404) {
+      return res.status(404).json({ success: false, message: error.message });
+    }
+
+    console.error("Update enquiry status error:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Failed to delete enquiry",
+      message: "Failed to update enquiry status",
     });
   }
 };

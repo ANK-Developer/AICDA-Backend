@@ -33,6 +33,7 @@ model Gallery {
   imageUrl     String
   category     GalleryCategory
   resourceType GalleryResourceType @default(IMAGE)
+  isActive     Boolean             @default(true)
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
 }
@@ -43,8 +44,7 @@ model Member {
   memberName           String
   fatherName           String?
   dateOfBirth          DateTime?
-  specialDate          DateTime?
-  specialDateNote      String?
+  specialDates         Json?
   photo                String?
   residentialAddress   String?
   mobile               String?
@@ -107,8 +107,7 @@ model Partner {
   partnerName          String
   fatherName           String?
   dateOfBirth          DateTime?
-  specialDate          DateTime?
-  specialDateNote      String?
+  specialDates         Json?
   photo                String?
   residentialAddress   String?
   mobile               String?
@@ -168,21 +167,8 @@ model PartnerRenewal {
   @@index([partnerId])
 }
 
-model ImportantDate {
-  id            Int      @id @default(autoincrement())
-  title         String
-  date          DateTime
-  description   String?
-  imageUrl      String?
-  imagePublicId String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@index([date])
-}
-
 model Enquiry {
-  id          Int      @id @default(autoincrement())
+  id          Int           @id @default(autoincrement())
   requestType String
   fullName    String
   mobile      String
@@ -191,12 +177,19 @@ model Enquiry {
   city        String?
   state       String?
   message     String?
-  status      String   @default("pending")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  status      EnquiryStatus @default(NEW)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
   @@index([status])
   @@index([createdAt])
+}
+
+enum EnquiryStatus {
+  NEW
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
 }
 
 enum Role {
