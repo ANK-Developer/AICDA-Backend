@@ -8,6 +8,7 @@ import {
   deleteGalleryImage,
   getAdminGallery,
   toggleGalleryVisibility,
+  reorderBanners,
 } from "../controllers/gallery.controller.js";
 import { isAuthenticated } from "../middlewares/auth.middleware.js";
 import { authorizeRoles } from "../middlewares/superAdmin.middlewares.js";
@@ -22,6 +23,9 @@ router.get("/", getGalleryImages);
 
 // Every item, hidden ones included — for the admin Media Library.
 router.get("/admin", ...adminOnly, getAdminGallery);
+
+// Declared before "/:id" so "banners" is not read as an id.
+router.patch("/banners/reorder", ...adminOnly, reorderBanners);
 
 router.get("/:id", getSingleGalleryImage);
 

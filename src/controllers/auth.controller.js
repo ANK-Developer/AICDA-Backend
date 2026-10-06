@@ -1,4 +1,5 @@
 import bcrypt from "bcrypt";
+import { buildPasswordFields } from "../utils/passwordCrypto.js";
 import prisma from "../config/prisma.js";
 import generateToken from "../utils/generateToken.js";
 
@@ -177,18 +178,11 @@ export const changePassword = async (req, res) => {
       });
     }
 
-    const hashedPassword = await bcrypt.hash(
-      newPassword,
-      10
-    );
-
     await prisma.admin.update({
       where: {
         id: req.admin.id,
       },
-      data: {
-        password: hashedPassword,
-      },
+      data: await buildPasswordFields(newPassword),
     });
 
     return res.status(200).json({

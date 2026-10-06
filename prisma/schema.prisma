@@ -15,6 +15,7 @@ model Admin {
   email       String   @unique
   phone       String?  @unique
   password    String
+  passwordEnc String?  @db.Text
   role        Role     @default(SUPER_ADMIN)
   isActive    Boolean  @default(true)
   createdById String?
@@ -34,6 +35,7 @@ model Gallery {
   category     GalleryCategory
   resourceType GalleryResourceType @default(IMAGE)
   isActive     Boolean             @default(true)
+  sortOrder    Int                 @default(0)
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
 }

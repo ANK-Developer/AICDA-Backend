@@ -129,3 +129,20 @@ export const resetSuperAdminPassword = async (req, res, next) => {
     next(error);
   }
 };
+
+export const revealSuperAdminPassword = async (req, res, next) => {
+  try {
+    const password = await superAdminService.revealSuperAdminPassword(req.params.id);
+
+    console.log(`[AUDIT] ${req.admin.id} revealed the password of admin ${req.params.id}`);
+
+    res.set("Cache-Control", "no-store");
+
+    return res.status(200).json({
+      success: true,
+      data: { password },
+    });
+  } catch (error) {
+    next(error);
+  }
+};

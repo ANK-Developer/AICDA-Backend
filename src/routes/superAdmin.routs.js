@@ -7,6 +7,7 @@ import {
   updateSuperAdminStatus,
   deleteSuperAdmin,
   resetSuperAdminPassword,
+  revealSuperAdminPassword,
 } from "../controllers/superAdmin.controllers.js";
 import { isAuthenticated } from "../middlewares/auth.middleware.js";
 import { authorizeRoles } from "../middlewares/superAdmin.middlewares.js";
@@ -28,5 +29,6 @@ router.patch("/:id", validate(updateSuperAdminValidation), updateSuperAdmin);
 router.patch("/:id/status", updateSuperAdminStatus);
 router.delete("/:id", deleteSuperAdmin);
 router.post("/:id/reset-password", validate(resetPasswordValidation), resetSuperAdminPassword);
+router.post("/:id/reveal-password", revealSuperAdminPassword);
 
 export default router;

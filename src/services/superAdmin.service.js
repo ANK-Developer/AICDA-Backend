@@ -1,5 +1,5 @@
-import bcrypt from "bcrypt";
 import prisma from "../config/prisma.js";
+import { buildPasswordFields, decryptPassword } from "../utils/passwordCrypto.js";
 
 const superAdminSelect = {
   id: true,
@@ -32,15 +32,13 @@ export const getSuperAdminById = async (id) => {
 };
 
 export const createSuperAdmin = async (data, creatorId) => {
-  const hashedPassword = await bcrypt.hash(data.password, 10);
-
   return await prisma.admin.create({
     data: {
       firstName: data.firstName,
-      lastName: data.lastName,
+      lastName: data.lastName || "",
       email: data.email.trim().toLowerCase(),
       phone: data.phone || null,
-      password: hashedPassword,
+      ...(await buildPasswordFields(data.password)),
       createdById: creatorId,
     },
     select: superAdminSelect,
@@ -111,10 +109,29 @@ export const resetSuperAdminPassword = async (id, newPassword) => {
     throw error;
   }
 
-  const hashedPassword = await bcrypt.hash(newPassword, 10);
-
   await prisma.admin.update({
     where: { id },
-    data: { password: hashedPassword },
+    data: await buildPasswordFields(newPassword),
   });
+};
+
+export const revealSuperAdminPassword = async (id) => {
+  const admin = await prisma.admin.findUnique({
+    where: { id },
+    select: { passwordEnc: true },
+  });
+
+  if (!admin) {
+    const error = new Error("Super admin not found");
+    error.status = 404;
+    throw error;
+  }
+
+  if (!admin.passwordEnc) {
+    const error = new Error("Password is not viewable for this admin. Reset it to enable viewing.");
+    error.status = 404;
+    throw error;
+  }
+
+  return decryptPassword(admin.passwordEnc);
 };

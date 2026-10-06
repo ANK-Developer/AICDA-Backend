@@ -6,10 +6,7 @@ export const createSuperAdminValidation = Joi.object({
     "string.empty": "First name is required",
   }),
 
-  lastName: Joi.string().min(2).max(50).required().messages({
-    "any.required": "Last name is required",
-    "string.empty": "Last name is required",
-  }),
+  lastName: Joi.string().min(2).max(50).allow("").optional(),
 
   email: Joi.string().email().required().messages({
     "any.required": "Email is required",
@@ -33,7 +30,7 @@ export const createSuperAdminValidation = Joi.object({
 export const updateSuperAdminValidation = Joi.object({
   firstName: Joi.string().min(2).max(50).optional(),
 
-  lastName: Joi.string().min(2).max(50).optional(),
+  lastName: Joi.string().min(2).max(50).allow("").optional(),
 
   email: Joi.string().email().optional().messages({
     "string.email": "Invalid email address",

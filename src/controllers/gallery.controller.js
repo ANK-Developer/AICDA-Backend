@@ -1,6 +1,7 @@
 import prisma from "../config/prisma.js";
 import fs from "fs";
 import path from "path";
+import { BANNER_SECTION_LIMITS, isBannerSection } from "../utils/bannerSections.js";
 
 const GALLERY_CATEGORIES = ["ASSOCIATION", "POLITICAL_ACHIEVEMENT", "IMAGE", "DIRECTORY", "LETTER", "BANNER"];
 
@@ -16,6 +17,12 @@ const parseVideoUrl = (value) => {
     return null;
   }
 };
+
+// Banners play as a slideshow in their admin-chosen order; everything else is newest first.
+const galleryOrder = (category) =>
+  category === "BANNER"
+    ? [{ sortOrder: "asc" }, { createdAt: "asc" }]
+    : [{ createdAt: "desc" }];
 
 const removeLocalFile = (fileUrl) => {
   if (!fileUrl || !fileUrl.startsWith("/uploads/")) return;
@@ -75,6 +82,42 @@ export const uploadImage = async (req, res) => {
       defaultTitle = req.file.originalname;
     }
 
+    let sortOrder = 0;
+
+    if (category === "BANNER") {
+      const section = title?.trim();
+
+      if (isVideo || !isBannerSection(section)) {
+        if (req.file?.path) fs.unlink(req.file.path, () => {});
+
+        return res.status(400).json({
+          success: false,
+          message: "Choose a valid banner section and upload an image",
+        });
+      }
+
+      const [count, last] = await Promise.all([
+        prisma.gallery.count({ where: { category: "BANNER", title: section } }),
+        prisma.gallery.aggregate({
+          where: { category: "BANNER", title: section },
+          _max: { sortOrder: true },
+        }),
+      ]);
+
+      const limit = BANNER_SECTION_LIMITS[section];
+
+      if (count >= limit) {
+        fs.unlink(req.file.path, () => {});
+
+        return res.status(400).json({
+          success: false,
+          message: `This section already has the maximum of ${limit} banner${limit === 1 ? "" : "s"}. Delete one to add another.`,
+        });
+      }
+
+      sortOrder = (last._max.sortOrder ?? -1) + 1;
+    }
+
     const gallery = await prisma.gallery.create({
       data: {
         title: title?.trim() || defaultTitle,
@@ -82,6 +125,7 @@ export const uploadImage = async (req, res) => {
         category,
         imageUrl: fileUrl,
         resourceType: isVideo ? "VIDEO" : "IMAGE",
+        sortOrder,
       },
     });
 
@@ -121,9 +165,7 @@ export const getGalleryImages = async (req, res) => {
 
     const gallery = await prisma.gallery.findMany({
       where: { isActive: true, ...(category && { category }) },
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy: galleryOrder(category),
     });
 
     return res.status(200).json({
@@ -158,7 +200,7 @@ export const getAdminGallery = async (req, res) => {
 
     const gallery = await prisma.gallery.findMany({
       where: category ? { category } : {},
-      orderBy: { createdAt: "desc" },
+      orderBy: galleryOrder(category),
     });
 
     return res.status(200).json({ success: true, count: gallery.length, gallery });
@@ -201,6 +243,48 @@ export const toggleGalleryVisibility = async (req, res) => {
     console.error(error);
 
     return res.status(500).json({ success: false, message: "Unable to update gallery item" });
+  }
+};
+
+// ==========================
+// Admin: reorder the banners of one section
+// body: { section: "home", ids: [id, id, ...] } — ids in the wanted order
+// ==========================
+
+export const reorderBanners = async (req, res) => {
+  try {
+    const { section, ids } = req.body;
+
+    if (!isBannerSection(section) || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, message: "A valid section and ids are required" });
+    }
+
+    const existing = await prisma.gallery.findMany({
+      where: { category: "BANNER", title: section },
+      select: { id: true },
+    });
+
+    const sameSet =
+      existing.length === ids.length &&
+      new Set(ids).size === ids.length &&
+      existing.every((item) => ids.includes(item.id));
+
+    if (!sameSet) {
+      return res.status(400).json({
+        success: false,
+        message: "The list does not match this section's banners. Refresh and try again.",
+      });
+    }
+
+    await prisma.$transaction(
+      ids.map((id, index) => prisma.gallery.update({ where: { id }, data: { sortOrder: index } })),
+    );
+
+    return res.status(200).json({ success: true, message: "Banner order saved" });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({ success: false, message: "Unable to save banner order" });
   }
 };
 

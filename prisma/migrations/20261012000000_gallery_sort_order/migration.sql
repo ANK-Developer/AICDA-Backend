@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `Gallery` ADD COLUMN `sortOrder` INTEGER NOT NULL DEFAULT 0;

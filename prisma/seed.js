@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcrypt";
+import { buildPasswordFields } from "../src/utils/passwordCrypto.js";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -12,8 +12,6 @@ async function main() {
   if (!adminPassword) {
     throw new Error("ADMIN_PASSWORD is missing in .env");
   }
-
-  const hashedPassword = await bcrypt.hash(adminPassword, 10);
 
   const existing = await prisma.admin.findUnique({
     where: {
@@ -32,7 +30,7 @@ async function main() {
       lastName: "Admin",
       email: "superadmin@gmail.com",
       phone: "9999999999",
-      password: hashedPassword,
+      ...(await buildPasswordFields(adminPassword)),
       role: "SUPER_ADMIN",
     },
   });
