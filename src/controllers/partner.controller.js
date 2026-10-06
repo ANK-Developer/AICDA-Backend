@@ -78,12 +78,13 @@ export const getPartnerById = async (req, res, next) => {
 
 export const getAllPartners = async (req, res, next) => {
   try {
-    const { partners, pagination } = await partnerService.getAllPartners(req.query);
+    const { partners, pagination, stats } = await partnerService.getAllPartners(req.query);
 
     return res.status(200).json({
       success: true,
       count: partners.length,
       pagination,
+      stats,
       data: partners,
     });
   } catch (error) {
@@ -208,11 +209,11 @@ export const togglePartnerStatus = async (req, res, next) => {
   try {
     const { partnerId } = req.params;
 
-    const partner = await partnerService.togglePartnerStatus(partnerId);
+    const partner = await partnerService.setPartnerStatus(partnerId, req.body, req.admin);
 
     return res.status(200).json({
       success: true,
-      message: partner.isActive ? "Partner activated successfully" : "Partner deactivated successfully",
+      message: partner.status.status === "ACTIVE" ? "Partner activated successfully" : "Partner deactivated successfully",
       data: partner,
     });
   } catch (error) {

@@ -1,6 +1,7 @@
 import prisma from "../config/prisma.js";
 import { resolveLocationIds } from "../utils/location.js";
-import { isValidToday, nextValidityFrom, endOfDayIST } from "../utils/validity.js";
+import { resolveRenewalPeriod, validityFromForEdit, endOfDayIST } from "../utils/validity.js";
+import { parseExpiringDays, parseStatusChange, statusCounts, statusFilterWhere, withStatus } from "../utils/membership.js";
 import { asSpecialDateList, buildSpecialDate, parseSpecialDates, updateSpecialDateInList } from "../utils/specialDates.js";
 const getLocalPhotoPath = (file) => {
   if (!file) return null;
@@ -19,12 +20,19 @@ export const createMember = async (req) => {
           cityId: undefined,
         }),
   ]);
-  // Validity always starts from the joining date (or today, if none given)
-  // — never trusted from the client. Only the expiry (validityTo) is
-  // admin-entered, when they record the offline payment.
+  // A member created without payment has no validity yet. When the first payment
+  // is entered, Valid From defaults to today and the payment date is today.
   const dateOfJoining = body.dateOfJoining ? new Date(body.dateOfJoining) : null;
-  const validityFrom = dateOfJoining || new Date();
-  const validityTo = body.validityTo ? endOfDayIST(body.validityTo) : null;
+  const period = body.validityTo
+    ? resolveRenewalPeriod({
+        previousValidityTo: null,
+        createdAt: new Date(),
+        validityFrom: body.validityFrom,
+        validityTo: body.validityTo,
+      })
+    : null;
+  const validityFrom = period?.validityFrom ?? null;
+  const validityTo = period?.validityTo ?? null;
 
   return prisma.$transaction(async (tx) => {
     const member = await tx.member.create({
@@ -45,7 +53,7 @@ export const createMember = async (req) => {
         companyTelephone: body.companyTelephone || null,
         packetNo: body.packetNo || null,
         dateOfJoining,
-        validityFrom: validityTo ? validityFrom : null,
+        validityFrom,
         validityTo,
         aadharNo: body.aadharNo || null,
         stateId,
@@ -54,11 +62,12 @@ export const createMember = async (req) => {
       },
     });
 
-    if (validityTo) {
+    if (period) {
       await tx.memberRenewal.create({
         data: {
           memberId: member.id,
           amount: body.amount !== undefined && body.amount !== "" ? body.amount : null,
+          paymentDate: period.paymentDate,
           validityFrom,
           validityTo,
           note: body.note || null,
@@ -66,30 +75,7 @@ export const createMember = async (req) => {
       });
     }
 
-    return member;
-  });
-};
-
-// Validity isn't watched by a scheduler, so this sweep runs before every
-// read and keeps isActive self-healing on expiry — mirrors
-// partner.service.js's syncPartnerActiveStatus. It only ever turns an
-// expired member off; it never turns one back on, otherwise a manual
-// deactivation (toggleMemberStatus) would get silently reverted the next
-// time the list is loaded, while the validity window is still current.
-// Reactivation happens explicitly, via renew or by extending validityTo.
-export const syncMemberActiveStatus = async () => {
-  const now = new Date();
-
-  await prisma.member.updateMany({
-    where: {
-      isActive: true,
-      validityTo: {
-        lt: now,
-      },
-    },
-    data: {
-      isActive: false,
-    },
+    return withStatus(member);
   });
 };
 
@@ -99,8 +85,6 @@ const SORTABLE_MEMBER_FIELDS = ["createdAt", "updatedAt", "memberId", "memberNam
 // status (active/inactive), stateId, cityId, page, limit, sortBy, order —
 // mirrors partner.service.js's getAllPartners.
 export const getAllMembers = async (query = {}) => {
-  const syncPromise = syncMemberActiveStatus();
-
   const { search, status, stateId, cityId, page = 1, limit = 10, sortBy = "createdAt", order = "desc" } = query;
 
   const where = {};
@@ -110,8 +94,11 @@ export const getAllMembers = async (query = {}) => {
     where.OR = [...(isNumeric ? [{ memberId: Number(search.trim()) }] : []), { memberName: { contains: search } }, { companyName: { contains: search } }, { mobile: { contains: search } }, { designation: { contains: search } }];
   }
 
-  if (status === "active") where.isActive = true;
-  if (status === "inactive") where.isActive = false;
+  // status: active | inactive | blocked | expired | pending | expiring (see
+  // utils/membership.js). Worked out here, never in the browser.
+  const expiringDays = parseExpiringDays(query.expiringDays);
+  const statusWhere = statusFilterWhere(status, expiringDays);
+  if (statusWhere) where.AND = [...(where.AND || []), statusWhere];
 
   if (stateId) where.stateId = Number(stateId);
   if (cityId) where.cityId = Number(cityId);
@@ -122,9 +109,7 @@ export const getAllMembers = async (query = {}) => {
   const sortField = SORTABLE_MEMBER_FIELDS.includes(sortBy) ? sortBy : "createdAt";
   const sortOrder = order === "asc" ? "asc" : "desc";
 
-  const [, [members, total, activeCount, inactiveCount]] = await Promise.all([
-    syncPromise,
-    prisma.$transaction([
+  const [members, total, stats] = await Promise.all([
       prisma.member.findMany({
         where,
         include: {
@@ -141,33 +126,24 @@ export const getAllMembers = async (query = {}) => {
 
       prisma.member.count({ where }),
       // Directory-wide counts, independent of the current search/status
-      // filter — these back the "Total / Active / Inactive" summary bar.
-      prisma.member.count({ where: { isActive: true } }),
-      prisma.member.count({ where: { isActive: false } }),
-    ]),
+      // filter — these back the summary cards.
+      statusCounts(prisma.member, expiringDays),
   ]);
 
   return {
-    members,
+    members: members.map(withStatus),
     pagination: {
       page: pageNumber,
       limit: pageSize,
       total,
       totalPages: Math.max(Math.ceil(total / pageSize), 1),
     },
-    stats: {
-      total: activeCount + inactiveCount,
-      active: activeCount,
-      inactive: inactiveCount,
-    },
+    stats,
   };
 };
 
 export const getPublicMembers = async () => {
-  const syncPromise = syncMemberActiveStatus();
-
-  const [, members] = await Promise.all([
-    syncPromise,
+  const [members] = await Promise.all([
     prisma.member.findMany({
       // where: { isActive: true },
       select: {
@@ -198,7 +174,7 @@ export const getPublicMembers = async () => {
   ]);
 
   return members.map((member) => ({
-    ...member,
+    ...withStatus(member),
     state: member.state?.stateName ?? null,
     city: member.city?.cityName ?? null,
   }));
@@ -213,8 +189,7 @@ export const getPublicMembers = async () => {
 // ======================================================
 
 export const getPublicMemberById = async (id) => {
-  const [, member] = await Promise.all([
-    syncMemberActiveStatus(),
+  const [member] = await Promise.all([
     prisma.member.findUnique({
       where: { id: Number(id) },
       select: {
@@ -258,7 +233,8 @@ export const getPublicMemberById = async (id) => {
   if (!member) return null;
 
   return {
-    ...member,
+    ...withStatus(member),
+    partners: member.partners.map(withStatus),
     state: member.state?.stateName ?? null,
     city: member.city?.cityName ?? null,
   };
@@ -267,8 +243,7 @@ export const getPublicMemberById = async (id) => {
 // Includes partners and renewal (payment) history so the admin details page
 // can answer "who are their partners" and "when did they pay / renew".
 export const getMemberById = async (id) => {
-  const [, member] = await Promise.all([
-    syncMemberActiveStatus(),
+  const [member] = await Promise.all([
     prisma.member.findUnique({
       where: { id: Number(id) },
       include: {
@@ -279,13 +254,15 @@ export const getMemberById = async (id) => {
           orderBy: { partnerNumber: "asc" },
         },
         renewals: {
-          orderBy: { paymentDate: "desc" },
+          orderBy: [{ validityTo: "desc" }, { paymentDate: "desc" }],
         },
       },
     }),
   ]);
 
-  return member;
+  if (!member) return member;
+
+  return { ...withStatus(member), partners: member.partners.map(withStatus) };
 };
 
 export const updateMember = async (id, req) => {
@@ -309,20 +286,13 @@ export const updateMember = async (id, req) => {
         }),
   ]);
   // validityFrom is never client-supplied — if validityTo is being changed
-  // here (rather than through the dedicated renew endpoint), re-derive it
-  // from the joining date the same way create does.
+  // here (rather than through the dedicated renew endpoint), derive it the
+  // same way renew does: the creation day for a first payment, the previous
+  // expiry for an extension.
   const resolvedDateOfJoining = body.dateOfJoining !== undefined ? (body.dateOfJoining ? new Date(body.dateOfJoining) : null) : undefined;
-  const effectiveDateOfJoining = resolvedDateOfJoining !== undefined ? resolvedDateOfJoining : existing.dateOfJoining;
 
-  const resolvedValidityFrom = body.validityTo !== undefined ? (body.validityTo ? effectiveDateOfJoining || new Date() : null) : undefined;
   const resolvedValidityTo = body.validityTo !== undefined ? (body.validityTo ? endOfDayIST(body.validityTo) : null) : undefined;
-  // Now that syncMemberActiveStatus never auto-reactivates (see that
-  // function's comment), extending the expiry here — rather than through
-  // /renew, which already sets isActive itself — has to flip isActive back
-  // on explicitly. Only recompute when validityTo actually moved, so
-  // resaving the form without touching the date can't undo a manual
-  // toggleMemberStatus deactivation.
-  const validityToChanged = body.validityTo !== undefined && (existing.validityTo ? existing.validityTo.getTime() : null) !== (resolvedValidityTo ? resolvedValidityTo.getTime() : null);
+  const resolvedValidityFrom = resolvedValidityTo === undefined ? undefined : resolvedValidityTo === null ? null : validityFromForEdit(existing, resolvedValidityTo);
 
   const data = {
     memberId: body.memberId !== undefined ? Number(body.memberId) : undefined,
@@ -347,9 +317,6 @@ export const updateMember = async (id, req) => {
     stateId,
     district: body.district,
     cityId,
-    ...(validityToChanged && {
-      isActive: Boolean(resolvedValidityTo && resolvedValidityTo.getTime() >= Date.now()),
-    }),
   };
 
   Object.keys(data).forEach((key) => {
@@ -386,11 +353,15 @@ export const updateMember = async (id, req) => {
       });
     }
 
-    return updated;
+    return withStatus(updated);
   });
 };
 
-export const toggleMemberStatus = async (id) => {
+// Manual status change by an admin. Deactivating needs a reason; the reason,
+// the admin and the time are stored. Renewing or editing never touches this.
+export const setMemberStatus = async (id, body, admin) => {
+  const change = parseStatusChange(body, admin);
+
   const member = await prisma.member.findUnique({
     where: { id: Number(id) },
   });
@@ -401,10 +372,12 @@ export const toggleMemberStatus = async (id) => {
     throw error;
   }
 
-  return prisma.member.update({
+  const updated = await prisma.member.update({
     where: { id: Number(id) },
-    data: { isActive: !member.isActive },
+    data: change,
   });
+
+  return withStatus(updated);
 };
 
 export const renewMember = async (id, req) => {
@@ -418,19 +391,23 @@ export const renewMember = async (id, req) => {
     throw error;
   }
 
-  const { validityTo, amount, note } = req.body;
+  const { validityFrom: requestedFrom, validityTo, amount, note } = req.body;
 
-  const validityFrom = nextValidityFrom(member.validityTo);
-
-  const normalizedValidityTo = endOfDayIST(validityTo);
+  // Valid From and Payment Date are optional — see resolveRenewalPeriod for the
+  // defaults and the rules that keep the periods in order.
+  const period = resolveRenewalPeriod({
+    previousValidityTo: member.validityTo,
+    createdAt: member.createdAt,
+    validityFrom: requestedFrom,
+    validityTo,
+  });
 
   return prisma.$transaction(async (tx) => {
     const renewed = await tx.member.update({
       where: { id: Number(id) },
       data: {
-        validityFrom,
-        validityTo: normalizedValidityTo,
-        isActive: true,
+        validityFrom: period.validityFrom,
+        validityTo: period.validityTo,
       },
     });
 
@@ -438,13 +415,14 @@ export const renewMember = async (id, req) => {
       data: {
         memberId: Number(id),
         amount: amount !== undefined && amount !== "" ? amount : null,
-        validityFrom,
-        validityTo: normalizedValidityTo,
+        paymentDate: period.paymentDate,
+        validityFrom: period.validityFrom,
+        validityTo: period.validityTo,
         note: note || null,
       },
     });
 
-    return renewed;
+    return withStatus(renewed);
   });
 };
 

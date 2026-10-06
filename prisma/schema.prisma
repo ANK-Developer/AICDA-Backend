@@ -64,7 +64,12 @@ model Member {
   stateId              Int?
   district             String?
   cityId               Int?
+  // Manual status set by an admin: true = ACTIVE, false = INACTIVE (reason required).
+  // Membership validity (expired / days remaining) is calculated from the dates.
   isActive             Boolean         @default(true)
+  statusReason         String?         @db.Text
+  statusActionBy       String?
+  statusActionAt       DateTime?
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
   city                 City?           @relation(fields: [cityId], references: [id])
@@ -127,7 +132,12 @@ model Partner {
   dateOfJoining        DateTime?
   validityFrom         DateTime?
   validityTo           DateTime?
+  // Manual status set by an admin: true = ACTIVE, false = INACTIVE (reason required).
+  // Membership validity (expired / days remaining) is calculated from the dates.
   isActive             Boolean          @default(true)
+  statusReason         String?          @db.Text
+  statusActionBy       String?
+  statusActionAt       DateTime?
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
   city                 City?            @relation(fields: [cityId], references: [id])
