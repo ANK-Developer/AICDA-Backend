@@ -35,7 +35,7 @@ export const createSuperAdmin = async (data, creatorId) => {
   return await prisma.admin.create({
     data: {
       firstName: data.firstName,
-      lastName: data.lastName,
+      lastName: data.lastName || "",
       email: data.email.trim().toLowerCase(),
       phone: data.phone || null,
       ...(await buildPasswordFields(data.password)),
