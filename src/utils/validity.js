@@ -28,14 +28,48 @@ export const nextValidityFrom = (previousValidityTo) => {
   return next;
 };
 
-export const endOfDayIST = (dateString) => {
-  if (!dateString) return null;
+const IST_DAY = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Kolkata",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
 
-  const date = new Date(`${dateString}T23:59:59.999+05:30`);
-
-  if (Number.isNaN(date.getTime())) {
-    throw new Error("Invalid validity date");
+// "YYYY-MM-DD", a full ISO timestamp (as stored in the database and returned by
+// the API) or a Date all name a calendar day. Returns that day in IST as
+// "YYYY-MM-DD", or null when the value is not a real date.
+const toISTDay = (value) => {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : IST_DAY.format(value);
   }
 
-  return date;
+  const text = String(value).trim();
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    // Rejects impossible days such as 2026-02-31, which Date would roll over.
+    const parsed = new Date(`${text}T00:00:00Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === text
+      ? text
+      : null;
+  }
+
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : IST_DAY.format(parsed);
+};
+
+// Validity runs through the whole last day, so the stored expiry is the very end
+// of that day in IST. Accepts a plain date or a full timestamp so a record that
+// was read from the API and sent back unchanged never fails here.
+export const endOfDayIST = (value) => {
+  if (!value) return null;
+
+  const day = toISTDay(value);
+
+  if (!day) {
+    const error = new Error("Invalid validity date");
+    error.status = 400;
+    throw error;
+  }
+
+  return new Date(`${day}T23:59:59.999+05:30`);
 };
