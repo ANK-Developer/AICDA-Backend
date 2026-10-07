@@ -1,5 +1,4 @@
 import prisma from "../config/prisma.js";
-import { resolveLocationIds } from "../utils/location.js";
 import { resolveRenewalPeriod, validityFromForEdit, endOfDayIST } from "../utils/validity.js";
 import { parseExpiringDays, parseStatusChange, statusCounts, statusFilterWhere, withStatus } from "../utils/membership.js";
 import { asSpecialDateList, buildSpecialDate, parseSpecialDates, updateSpecialDateInList } from "../utils/specialDates.js";
@@ -15,6 +14,16 @@ const findPartnerRecord = (identifier, extra = {}) => {
     ...extra,
   });
 };
+
+// State / district / city are plain text, so stray whitespace is stripped before
+// it is saved (undefined stays undefined: "not sent").
+const trimText = (value) => (typeof value === "string" ? value.trim() : value);
+
+const trimLocation = ({ state, district, city }) => ({
+  state: trimText(state),
+  district: trimText(district),
+  city: trimText(city),
+});
 
 // ======================================================
 // GENERATE PARTNER ID
@@ -115,11 +124,10 @@ export const createPartner = async (data) => {
     validityTo,
     amount,
     note,
-  } = data;
+  } = { ...data, ...trimLocation(data) };
 
   // Partner's own state/city if given, otherwise fall back to the Member's.
   const locationGiven = state !== undefined || city !== undefined;
-  const resolvedLocation = locationGiven ? await resolveLocationIds(state, city) : null;
 
   // A partner created without payment has no validity yet. When the first
   // payment is entered, Valid From defaults to today and the payment date is today.
@@ -180,11 +188,11 @@ export const createPartner = async (data) => {
 
             packetNo: packetNo ?? member.packetNo,
 
-            stateId: locationGiven ? resolvedLocation.stateId : member.stateId,
+            state: locationGiven ? state || null : member.state,
 
             district: district !== undefined ? district || null : member.district,
 
-            cityId: locationGiven ? resolvedLocation.cityId : member.cityId,
+            city: locationGiven ? city || null : member.city,
 
             // ------------------------------------------------
             // Dates — validityFrom is always backend-derived, never
@@ -242,8 +250,6 @@ export const getPartnerById = async (identifier) => {
           },
         },
 
-        state: true,
-        city: true,
         renewals: { orderBy: [{ validityTo: "desc" }, { paymentDate: "desc" }] },
       },
     }),
@@ -276,11 +282,6 @@ export const getPartnersByMember = async (memberId) => {
       memberId: member.id,
     },
 
-    include: {
-      state: true,
-      city: true,
-    },
-
     orderBy: {
       partnerNumber: "asc",
     },
@@ -295,7 +296,7 @@ export const getPartnersByMember = async (memberId) => {
 // Supports:
 //   search   → partnerName / partnerId / mobile / panCardNo
 //   status   → "active" | "inactive"
-//   stateId, cityId, memberId → filters
+//   state, district, city, memberId → filters
 //   page, limit               → pagination
 //   sortBy, order              → sorting
 // ======================================================
@@ -303,7 +304,7 @@ export const getPartnersByMember = async (memberId) => {
 const SORTABLE_PARTNER_FIELDS = ["createdAt", "updatedAt", "partnerName", "partnerId", "dateOfJoining", "validityFrom", "validityTo"];
 
 export const getAllPartners = async (query = {}) => {
-  const { search, status, stateId, cityId, memberId, page = 1, limit = 10, sortBy = "createdAt", order = "desc" } = query;
+  const { search, status, state, district, city, memberId, page = 1, limit = 10, sortBy = "createdAt", order = "desc" } = query;
 
   const where = {};
 
@@ -329,8 +330,9 @@ export const getAllPartners = async (query = {}) => {
   const statusWhere = statusFilterWhere(status, expiringDays);
   if (statusWhere) where.AND = [...(where.AND || []), statusWhere];
 
-  if (stateId) where.stateId = Number(stateId);
-  if (cityId) where.cityId = Number(cityId);
+  if (state) where.state = state;
+  if (district) where.district = district;
+  if (city) where.city = city;
 
   if (memberId) {
     const member = await prisma.member.findUnique({
@@ -360,8 +362,6 @@ export const getAllPartners = async (query = {}) => {
             },
           },
 
-          state: true,
-          city: true,
         },
 
         orderBy: {
@@ -421,15 +421,9 @@ const PUBLIC_PARTNER_SELECT = {
       memberName: true,
     },
   },
-  state: { select: { stateName: true } },
-  city: { select: { cityName: true } },
+  state: true,
+  city: true,
 };
-
-const withPublicPartnerLocation = (partner) => ({
-  ...withStatus(partner),
-  state: partner.state?.stateName ?? null,
-  city: partner.city?.cityName ?? null,
-});
 
 export const getPublicPartners = async () => {
   const partners = await prisma.partner.findMany({
@@ -439,7 +433,7 @@ export const getPublicPartners = async () => {
     },
   });
 
-  return partners.map(withPublicPartnerLocation);
+  return partners.map(withStatus);
 };
 
 // ======================================================
@@ -457,7 +451,7 @@ export const getPublicPartnerById = async (identifier) => {
 
   if (!partner) return null;
 
-  return withPublicPartnerLocation(partner);
+  return withStatus(partner);
 };
 
 // ======================================================
@@ -507,11 +501,7 @@ export const updatePartner = async (identifier, data) => {
     validityTo,
     amount,
     note,
-  } = data;
-
-  // Only re-resolve state/city if the client actually sent one of them.
-  const locationGiven = state !== undefined || city !== undefined;
-  const { stateId, cityId } = locationGiven ? await resolveLocationIds(state, city) : { stateId: undefined, cityId: undefined };
+  } = { ...data, ...trimLocation(data) };
 
   // validityFrom is never client-supplied — if validityTo is being changed
   // here (rather than through the dedicated renew endpoint), derive it the
@@ -563,9 +553,10 @@ export const updatePartner = async (identifier, data) => {
         companyTelephone,
         packetNo,
 
-        stateId,
+        // An empty string clears the value; undefined leaves it unchanged.
+        state: state !== undefined ? state || null : undefined,
         district,
-        cityId,
+        city: city !== undefined ? city || null : undefined,
 
         dateOfJoining: resolvedDateOfJoining,
 
@@ -582,8 +573,6 @@ export const updatePartner = async (identifier, data) => {
           },
         },
 
-        state: true,
-        city: true,
       },
     });
 
@@ -647,8 +636,6 @@ export const renewPartner = async (identifier, data) => {
           },
         },
 
-        state: true,
-        city: true,
       },
     });
 
@@ -695,8 +682,6 @@ export const setPartnerStatus = async (identifier, body, admin) => {
         },
       },
 
-      state: true,
-      city: true,
     },
   });
 

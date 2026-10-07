@@ -26,8 +26,12 @@ export const validateMember=[
     .isLength({ min: 12, max: 12 })
     .withMessage("Aadhar must contain 12 digits"),
 
-  body("district")
-    .optional(),
+  // Trimmed in place, so the service only ever sees clean names.
+  body(["state", "district", "city"])
+    .optional()
+    .trim()
+    .isLength({ max: 100 })
+    .withMessage("State, district and city must be 100 characters or fewer"),
 
   body("validityFrom")
     .optional({ values: "falsy" })

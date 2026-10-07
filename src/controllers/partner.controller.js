@@ -72,7 +72,7 @@ export const getPartnerById = async (req, res, next) => {
 // GET ALL PARTNERS
 // GET /api/v1/partners
 //
-// Query: search, status, stateId, cityId, memberId,
+// Query: search, status, state, district, city, memberId,
 //        page, limit, sortBy, order
 // ======================================================
 

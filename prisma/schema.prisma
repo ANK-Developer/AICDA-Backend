@@ -61,9 +61,11 @@ model Member {
   validityFrom         DateTime?
   validityTo           DateTime?
   aadharNo             String?
-  stateId              Int?
+  // Location is plain text, picked from the state/district/city lists in the
+  // admin form (a name missing from those lists can still be typed in).
+  state                String?
   district             String?
-  cityId               Int?
+  city                 String?
   // Manual status set by an admin: true = ACTIVE, false = INACTIVE (reason required).
   // Membership validity (expired / days remaining) is calculated from the dates.
   isActive             Boolean         @default(true)
@@ -72,38 +74,13 @@ model Member {
   statusActionAt       DateTime?
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
-  city                 City?           @relation(fields: [cityId], references: [id])
-  state                State?          @relation(fields: [stateId], references: [id])
   renewals             MemberRenewal[]
   partners             Partner[]
 
   @@index([isActive])
-  @@index([stateId])
-  @@index([cityId])
-}
-
-model State {
-  id        Int       @id @default(autoincrement())
-  stateName String    @unique
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  cities    City[]
-  members   Member[]
-  partners  Partner[]
-}
-
-model City {
-  id        Int       @id @default(autoincrement())
-  cityName  String
-  stateId   Int
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  state     State     @relation(fields: [stateId], references: [id])
-  members   Member[]
-  partners  Partner[]
-
-  @@unique([cityName, stateId])
-  @@index([stateId], map: "City_stateId_fkey")
+  @@index([state])
+  @@index([district])
+  @@index([city])
 }
 
 model Partner {
@@ -126,9 +103,9 @@ model Partner {
   companyAddress       String?
   companyTelephone     String?
   packetNo             String?
-  stateId              Int?
+  state                String?
   district             String?
-  cityId               Int?
+  city                 String?
   dateOfJoining        DateTime?
   validityFrom         DateTime?
   validityTo           DateTime?
@@ -140,15 +117,14 @@ model Partner {
   statusActionAt       DateTime?
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
-  city                 City?            @relation(fields: [cityId], references: [id])
   member               Member           @relation(fields: [memberId], references: [id])
-  state                State?           @relation(fields: [stateId], references: [id])
   renewals             PartnerRenewal[]
 
   @@unique([memberId, partnerNumber])
   @@index([isActive])
-  @@index([stateId])
-  @@index([cityId])
+  @@index([state])
+  @@index([district])
+  @@index([city])
 }
 
 model MemberRenewal {

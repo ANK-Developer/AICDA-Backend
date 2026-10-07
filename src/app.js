@@ -9,7 +9,6 @@ import memberRoutes from "./routes/member.route.js";
 import enquiryRoutes from "./routes/enquiry.route.js";
 import authRoutes from "./routes/auth.route.js";
 import superAdminRoutes from "./routes/superAdmin.routs.js";
-import locationRoutes from "./routes/location.routes.js";
 import importantDateRoutes from "./routes/importantDate.routes.js";
 import dashboardRoutes from "./routes/dashboard.routes.js";
 import path from "path";
@@ -66,7 +65,6 @@ app.use("/api/v1/gallery", galleryRoutes);
 app.use("/api/v1/members", memberRoutes);
 app.use("/api/v1/enquiries", enquiryRoutes);
 app.use("/api/v1/super-admin", superAdminRoutes);
-app.use("/api/v1/locations", locationRoutes);
 app.use("/api/v1/important-dates", importantDateRoutes);
 app.use("/api/v1/partners", partnerRoutes);
 // Fallback JSON error handler (e.g. errors passed via next(error) from member routes)

@@ -1,5 +1,4 @@
 import prisma from "../config/prisma.js";
-import { resolveLocationIds } from "../utils/location.js";
 import { resolveRenewalPeriod, validityFromForEdit, endOfDayIST } from "../utils/validity.js";
 import { parseExpiringDays, parseStatusChange, statusCounts, statusFilterWhere, withStatus } from "../utils/membership.js";
 import { asSpecialDateList, buildSpecialDate, parseSpecialDates, updateSpecialDateInList } from "../utils/specialDates.js";
@@ -10,16 +9,7 @@ const getLocalPhotoPath = (file) => {
 };
 export const createMember = async (req) => {
   const body = req.body;
-  const [photo, { stateId, cityId }] = await Promise.all([
-    req.file ? Promise.resolve(getLocalPhotoPath(req.file)) : Promise.resolve(undefined),
-
-    body.state !== undefined || body.city !== undefined
-      ? resolveLocationIds(body.state, body.city)
-      : Promise.resolve({
-          stateId: undefined,
-          cityId: undefined,
-        }),
-  ]);
+  const photo = req.file ? getLocalPhotoPath(req.file) : undefined;
   // A member created without payment has no validity yet. When the first payment
   // is entered, Valid From defaults to today and the payment date is today.
   const dateOfJoining = body.dateOfJoining ? new Date(body.dateOfJoining) : null;
@@ -56,9 +46,9 @@ export const createMember = async (req) => {
         validityFrom,
         validityTo,
         aadharNo: body.aadharNo || null,
-        stateId,
+        state: body.state || null,
         district: body.district || null,
-        cityId,
+        city: body.city || null,
       },
     });
 
@@ -82,10 +72,10 @@ export const createMember = async (req) => {
 const SORTABLE_MEMBER_FIELDS = ["createdAt", "updatedAt", "memberId", "memberName", "dateOfJoining", "validityFrom", "validityTo"];
 
 // Supports: search (memberId/memberName/companyName/mobile/designation),
-// status (active/inactive), stateId, cityId, page, limit, sortBy, order —
+// status (active/inactive), state, district, city, page, limit, sortBy, order —
 // mirrors partner.service.js's getAllPartners.
 export const getAllMembers = async (query = {}) => {
-  const { search, status, stateId, cityId, page = 1, limit = 10, sortBy = "createdAt", order = "desc" } = query;
+  const { search, status, state, district, city, page = 1, limit = 10, sortBy = "createdAt", order = "desc" } = query;
 
   const where = {};
 
@@ -100,8 +90,9 @@ export const getAllMembers = async (query = {}) => {
   const statusWhere = statusFilterWhere(status, expiringDays);
   if (statusWhere) where.AND = [...(where.AND || []), statusWhere];
 
-  if (stateId) where.stateId = Number(stateId);
-  if (cityId) where.cityId = Number(cityId);
+  if (state) where.state = state;
+  if (district) where.district = district;
+  if (city) where.city = city;
 
   const pageNumber = Math.max(Number(page) || 1, 1);
   const pageSize = Math.min(Math.max(Number(limit) || 10, 1), 100);
@@ -113,8 +104,6 @@ export const getAllMembers = async (query = {}) => {
       prisma.member.findMany({
         where,
         include: {
-          state: true,
-          city: true,
           _count: { select: { partners: true } },
         },
         orderBy: {
@@ -164,8 +153,8 @@ export const getPublicMembers = async () => {
         mobile: true,
         photo: true,
         isActive: true,
-        state: { select: { stateName: true } },
-        city: { select: { cityName: true } },
+        state: true,
+        city: true,
       },
       orderBy: {
         createdAt: "desc",
@@ -173,11 +162,7 @@ export const getPublicMembers = async () => {
     }),
   ]);
 
-  return members.map((member) => ({
-    ...withStatus(member),
-    state: member.state?.stateName ?? null,
-    city: member.city?.cityName ?? null,
-  }));
+  return members.map(withStatus);
 };
 
 // ======================================================
@@ -210,8 +195,8 @@ export const getPublicMemberById = async (id) => {
         mobile: true,
         photo: true,
         isActive: true,
-        state: { select: { stateName: true } },
-        city: { select: { cityName: true } },
+        state: true,
+        city: true,
         partners: {
           select: {
             id: true,
@@ -235,8 +220,6 @@ export const getPublicMemberById = async (id) => {
   return {
     ...withStatus(member),
     partners: member.partners.map(withStatus),
-    state: member.state?.stateName ?? null,
-    city: member.city?.cityName ?? null,
   };
 };
 
@@ -247,10 +230,7 @@ export const getMemberById = async (id) => {
     prisma.member.findUnique({
       where: { id: Number(id) },
       include: {
-        state: true,
-        city: true,
         partners: {
-          include: { state: true, city: true },
           orderBy: { partnerNumber: "asc" },
         },
         renewals: {
@@ -275,16 +255,7 @@ export const updateMember = async (id, req) => {
   }
 
   const body = req.body;
-  const [photo, { stateId, cityId }] = await Promise.all([
-    req.file ? Promise.resolve(getLocalPhotoPath(req.file)) : Promise.resolve(undefined),
-
-    body.state !== undefined || body.city !== undefined
-      ? resolveLocationIds(body.state, body.city)
-      : Promise.resolve({
-          stateId: undefined,
-          cityId: undefined,
-        }),
-  ]);
+  const photo = req.file ? getLocalPhotoPath(req.file) : undefined;
   // validityFrom is never client-supplied — if validityTo is being changed
   // here (rather than through the dedicated renew endpoint), derive it the
   // same way renew does: the creation day for a first payment, the previous
@@ -314,9 +285,9 @@ export const updateMember = async (id, req) => {
     validityFrom: resolvedValidityFrom,
     validityTo: resolvedValidityTo,
     aadharNo: body.aadharNo,
-    stateId,
+    state: body.state !== undefined ? body.state || null : undefined,
     district: body.district,
-    cityId,
+    city: body.city !== undefined ? body.city || null : undefined,
   };
 
   Object.keys(data).forEach((key) => {
