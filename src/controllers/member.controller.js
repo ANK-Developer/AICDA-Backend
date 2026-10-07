@@ -96,11 +96,11 @@ export const updateMember = async (req, res, next) => {
 
 export const toggleMemberStatus = async (req, res, next) => {
   try {
-    const member = await memberService.toggleMemberStatus(req.params.id);
+    const member = await memberService.setMemberStatus(req.params.id, req.body, req.admin);
 
     res.status(200).json({
       success: true,
-      message: member.isActive ? "Member activated successfully" : "Member deactivated successfully",
+      message: member.status.status === "ACTIVE" ? "Member activated successfully" : "Member deactivated successfully",
       data: member,
     });
   } catch (error) {

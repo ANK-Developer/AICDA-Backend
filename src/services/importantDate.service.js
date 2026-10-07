@@ -1,5 +1,6 @@
 import prisma from "../config/prisma.js";
 import { asSpecialDateList } from "../utils/specialDates.js";
+import { activeWhere, inactiveWhere, withStatus } from "../utils/membership.js";
 
 // Important Dates are not stored on their own — they are derived from the
 // dateOfBirth and specialDates (array) already on every Member and Partner, so
@@ -38,6 +39,7 @@ const SELECT_FIELDS = {
   id: true,
   photo: true,
   isActive: true,
+  validityTo: true,
   dateOfBirth: true,
   specialDates: true,
 };
@@ -63,7 +65,7 @@ const toEntries = (record, { type, name, code }, today) =>
         name,
         code,
         photo: record.photo,
-        isActive: record.isActive,
+        isActive: withStatus(record).isActive,
         occasion: entry.occasion,
         date: entry.date,
         note: entry.note,
@@ -91,7 +93,8 @@ export const getImportantDates = async (query = {}) => {
   const isNumeric = term && /^\d+$/.test(term);
   const today = todayInIST();
 
-  const statusFilter = status === "active" ? { isActive: true } : status === "inactive" ? { isActive: false } : {};
+  // Effective status (manual status + running membership), same as the directory lists.
+  const statusFilter = status === "active" ? activeWhere() : status === "inactive" ? inactiveWhere() : {};
 
   const wantMembers = !TYPES.includes(type) || type === "member";
   const wantPartners = !TYPES.includes(type) || type === "partner";

@@ -1,6 +1,7 @@
 import prisma from "../config/prisma.js";
 import { resolveLocationIds } from "../utils/location.js";
-import { nextValidityFrom } from "../utils/validity.js";
+import { resolveRenewalPeriod, validityFromForEdit } from "../utils/validity.js";
+import { parseExpiringDays, parseStatusChange, statusCounts, statusFilterWhere, withStatus } from "../utils/membership.js";
 import { asSpecialDateList, buildSpecialDate, parseSpecialDates, updateSpecialDateInList } from "../utils/specialDates.js";
 
 // Admin UIs act on the numeric primary key (like the member module does),
@@ -110,6 +111,7 @@ export const createPartner = async (data) => {
 
     dateOfJoining,
 
+    validityFrom: requestedFrom,
     validityTo,
     amount,
     note,
@@ -119,11 +121,17 @@ export const createPartner = async (data) => {
   const locationGiven = state !== undefined || city !== undefined;
   const resolvedLocation = locationGiven ? await resolveLocationIds(state, city) : null;
 
-  // Validity always starts from the joining date (or today, if none given)
-  // — never trusted from the client. Only the expiry (validityTo) is
-  // admin-entered, when they record the offline payment.
+  // A partner created without payment has no validity yet. When the first
+  // payment is entered, Valid From defaults to today and the payment date is today.
   const resolvedDateOfJoining = dateOfJoining ? new Date(dateOfJoining) : null;
-  const validityFrom = resolvedDateOfJoining || new Date();
+  const period = validityTo
+    ? resolveRenewalPeriod({
+        previousValidityTo: null,
+        createdAt: new Date(),
+        validityFrom: requestedFrom,
+        validityTo,
+      })
+    : null;
 
   let attempt = 0;
 
@@ -185,28 +193,26 @@ export const createPartner = async (data) => {
 
             dateOfJoining: resolvedDateOfJoining,
 
-            validityFrom: validityTo ? validityFrom : null,
+            validityFrom: period?.validityFrom ?? null,
 
-            validityTo: validityTo ? new Date(validityTo) : null,
-
-            // Backend controls this
-            isActive: true,
+            validityTo: period?.validityTo ?? null,
           },
         });
 
-        if (validityTo) {
+        if (period) {
           await tx.partnerRenewal.create({
             data: {
               partnerId: partner.id,
               amount: amount !== undefined && amount !== "" ? amount : null,
-              validityFrom,
-              validityTo: new Date(validityTo),
+              paymentDate: period.paymentDate,
+              validityFrom: period.validityFrom,
+              validityTo: period.validityTo,
               note: note || null,
             },
           });
         }
 
-        return partner;
+        return withStatus(partner);
       });
     } catch (error) {
       // P2002 = unique constraint violation (partnerId or [memberId, partnerNumber])
@@ -225,8 +231,7 @@ export const createPartner = async (data) => {
 // ======================================================
 
 export const getPartnerById = async (identifier) => {
-  const [, partner] = await Promise.all([
-    syncPartnerActiveStatus(),
+  const [partner] = await Promise.all([
     findPartnerRecord(identifier, {
       include: {
         member: {
@@ -239,7 +244,7 @@ export const getPartnerById = async (identifier) => {
 
         state: true,
         city: true,
-        renewals: { orderBy: { paymentDate: "desc" } },
+        renewals: { orderBy: [{ validityTo: "desc" }, { paymentDate: "desc" }] },
       },
     }),
   ]);
@@ -248,7 +253,7 @@ export const getPartnerById = async (identifier) => {
     throw new Error("Partner not found");
   }
 
-  return partner;
+  return withStatus(partner);
 };
 
 // ======================================================
@@ -256,20 +261,17 @@ export const getPartnerById = async (identifier) => {
 // ======================================================
 
 export const getPartnersByMember = async (memberId) => {
-  const [, member] = await Promise.all([
-    syncPartnerActiveStatus(),
-    prisma.member.findUnique({
-      where: {
-        memberId: Number(memberId),
-      },
-    }),
-  ]);
+  const member = await prisma.member.findUnique({
+    where: {
+      memberId: Number(memberId),
+    },
+  });
 
   if (!member) {
     throw new Error("Member not found");
   }
 
-  return prisma.partner.findMany({
+  const partners = await prisma.partner.findMany({
     where: {
       memberId: member.id,
     },
@@ -283,6 +285,8 @@ export const getPartnersByMember = async (memberId) => {
       partnerNumber: "asc",
     },
   });
+
+  return partners.map(withStatus);
 };
 
 // ======================================================
@@ -299,18 +303,31 @@ export const getPartnersByMember = async (memberId) => {
 const SORTABLE_PARTNER_FIELDS = ["createdAt", "updatedAt", "partnerName", "partnerId", "dateOfJoining", "validityFrom", "validityTo"];
 
 export const getAllPartners = async (query = {}) => {
-  const syncPromise = syncPartnerActiveStatus();
-
   const { search, status, stateId, cityId, memberId, page = 1, limit = 10, sortBy = "createdAt", order = "desc" } = query;
 
   const where = {};
 
   if (search) {
-    where.OR = [{ partnerName: { contains: search } }, { partnerId: { contains: search } }, { mobile: { contains: search } }, { panCardNo: { contains: search } }];
+    const term = search.trim();
+    const isNumeric = /^d+$/.test(term);
+
+    where.OR = [
+      { partnerName: { contains: term } },
+      { partnerId: { contains: term } },
+      { mobile: { contains: term } },
+      { panCardNo: { contains: term } },
+      { companyName: { contains: term } },
+      { designation: { contains: term } },
+      { member: { memberName: { contains: term } } },
+      ...(isNumeric ? [{ member: { memberId: Number(term) } }] : []),
+    ];
   }
 
-  if (status === "active") where.isActive = true;
-  if (status === "inactive") where.isActive = false;
+  // status: active | inactive | blocked | expired | pending | expiring (see
+  // utils/membership.js). Worked out here, never in the browser.
+  const expiringDays = parseExpiringDays(query.expiringDays);
+  const statusWhere = statusFilterWhere(status, expiringDays);
+  if (statusWhere) where.AND = [...(where.AND || []), statusWhere];
 
   if (stateId) where.stateId = Number(stateId);
   if (cityId) where.cityId = Number(cityId);
@@ -330,9 +347,7 @@ export const getAllPartners = async (query = {}) => {
   const sortField = SORTABLE_PARTNER_FIELDS.includes(sortBy) ? sortBy : "createdAt";
   const sortOrder = order === "asc" ? "asc" : "desc";
 
-  const [, [partners, total]] = await Promise.all([
-    syncPromise,
-    prisma.$transaction([
+  const [partners, total, stats] = await Promise.all([
       prisma.partner.findMany({
         where,
 
@@ -358,17 +373,18 @@ export const getAllPartners = async (query = {}) => {
       }),
 
       prisma.partner.count({ where }),
-    ]),
+      statusCounts(prisma.partner, expiringDays),
   ]);
 
   return {
-    partners,
+    partners: partners.map(withStatus),
     pagination: {
       page: pageNumber,
       limit: pageSize,
       total,
       totalPages: Math.max(Math.ceil(total / pageSize), 1),
     },
+    stats,
   };
 };
 
@@ -410,14 +426,12 @@ const PUBLIC_PARTNER_SELECT = {
 };
 
 const withPublicPartnerLocation = (partner) => ({
-  ...partner,
+  ...withStatus(partner),
   state: partner.state?.stateName ?? null,
   city: partner.city?.cityName ?? null,
 });
 
 export const getPublicPartners = async () => {
-  await syncPartnerActiveStatus();
-
   const partners = await prisma.partner.findMany({
     select: PUBLIC_PARTNER_SELECT,
     orderBy: {
@@ -434,8 +448,6 @@ export const getPublicPartners = async () => {
 // ======================================================
 
 export const getPublicPartnerById = async (identifier) => {
-  await syncPartnerActiveStatus();
-
   const isNumericId = /^\d+$/.test(String(identifier));
 
   const partner = await prisma.partner.findFirst({
@@ -446,58 +458,6 @@ export const getPublicPartnerById = async (identifier) => {
   if (!partner) return null;
 
   return withPublicPartnerLocation(partner);
-};
-
-// ======================================================
-// AUTOMATIC ACTIVE / INACTIVE SWEEP
-//
-// Validity isn't watched by a scheduler, so this runs before every
-// read and keeps isActive self-healing without a cron job.
-// ======================================================
-
-// Only ever turns an expired/not-yet-started partner off; it never turns
-// one back on. Reactivating on every sweep would silently revert a manual
-// deactivation (togglePartnerStatus) the next time the list is loaded,
-// as long as the validity window was still current. Reactivation happens
-// explicitly instead, via renew or by updatePartnerActiveStatus when
-// validityTo is actually edited.
-export const syncPartnerActiveStatus = async () => {
-  const now = new Date();
-
-  await prisma.partner.updateMany({
-    where: {
-      isActive: true,
-      OR: [{ validityFrom: null }, { validityTo: null }, { validityFrom: { gt: now } }, { validityTo: { lt: now } }],
-    },
-    data: { isActive: false },
-  });
-};
-
-// ======================================================
-// GET PARTNER STATUS
-//
-// Active when:
-// validityFrom <= today <= validityTo
-//
-// Otherwise:
-// Inactive
-// ======================================================
-
-export const getPartnerStatus = (validityFrom, validityTo) => {
-  if (!validityFrom || !validityTo) {
-    return "inactive";
-  }
-
-  const now = new Date();
-
-  const from = new Date(validityFrom);
-  const to = new Date(validityTo);
-
-  if (now >= from && now <= to) {
-    return "active";
-  }
-
-  return "inactive";
 };
 
 // ======================================================
@@ -554,19 +514,13 @@ export const updatePartner = async (identifier, data) => {
   const { stateId, cityId } = locationGiven ? await resolveLocationIds(state, city) : { stateId: undefined, cityId: undefined };
 
   // validityFrom is never client-supplied — if validityTo is being changed
-  // here (rather than through the dedicated renew endpoint), re-derive it
-  // from the joining date the same way create does.
+  // here (rather than through the dedicated renew endpoint), derive it the
+  // same way renew does: the creation day for a first payment, the previous
+  // expiry for an extension.
   const resolvedDateOfJoining = dateOfJoining !== undefined ? (dateOfJoining ? new Date(dateOfJoining) : null) : undefined;
-  const effectiveDateOfJoining = resolvedDateOfJoining !== undefined ? resolvedDateOfJoining : existingPartner.dateOfJoining;
 
-  const resolvedValidityFrom = validityTo !== undefined ? (validityTo ? effectiveDateOfJoining || new Date() : null) : undefined;
   const resolvedValidityTo = validityTo !== undefined ? (validityTo ? new Date(validityTo) : null) : undefined;
-
-  // Whether this edit actually moves validityTo (vs. resaving the form with
-  // the same date, or not touching it at all) — recomputing isActive below
-  // is guarded by this so a manual togglePartnerStatus deactivation can't
-  // get silently undone by an unrelated field edit.
-  const validityToChanged = validityTo !== undefined && (existingPartner.validityTo ? existingPartner.validityTo.getTime() : null) !== (resolvedValidityTo ? resolvedValidityTo.getTime() : null);
+  const resolvedValidityFrom = resolvedValidityTo === undefined ? undefined : resolvedValidityTo === null ? null : validityFromForEdit(existingPartner, resolvedValidityTo);
 
   // Editing the partner (rather than using the dedicated /renew endpoint)
   // can also change validityTo or record an amount paid. Log a
@@ -648,14 +602,7 @@ export const updatePartner = async (identifier, data) => {
     return partner;
   });
 
-  // Validity changed — recompute isActive immediately rather than waiting
-  // for the next sweep so the response reflects the true status.
-  if (validityToChanged) {
-    const recalculated = await updatePartnerActiveStatus(updatedPartner);
-    updatedPartner.isActive = recalculated.isActive;
-  }
-
-  return updatedPartner;
+  return withStatus(updatedPartner);
 };
 
 // ======================================================
@@ -669,8 +616,16 @@ export const renewPartner = async (identifier, data) => {
     throw new Error("Partner not found");
   }
 
-  const { validityTo, amount, note } = data;
-  const validityFrom = nextValidityFrom(existingPartner.validityTo);
+  const { validityFrom: requestedFrom, validityTo, amount, note } = data;
+
+  // Valid From and Payment Date are optional — see resolveRenewalPeriod for the
+  // defaults and the rules that keep the periods in order.
+  const period = resolveRenewalPeriod({
+    previousValidityTo: existingPartner.validityTo,
+    createdAt: existingPartner.createdAt,
+    validityFrom: requestedFrom,
+    validityTo,
+  });
 
   return prisma.$transaction(async (tx) => {
     const renewed = await tx.partner.update({
@@ -679,9 +634,8 @@ export const renewPartner = async (identifier, data) => {
       },
 
       data: {
-        validityFrom,
-        validityTo: new Date(validityTo),
-        isActive: true,
+        validityFrom: period.validityFrom,
+        validityTo: period.validityTo,
       },
 
       include: {
@@ -702,30 +656,36 @@ export const renewPartner = async (identifier, data) => {
       data: {
         partnerId: existingPartner.id,
         amount: amount !== undefined && amount !== "" ? amount : null,
-        validityFrom,
-        validityTo: new Date(validityTo),
+        paymentDate: period.paymentDate,
+        validityFrom: period.validityFrom,
+        validityTo: period.validityTo,
         note: note || null,
       },
     });
 
-    return renewed;
+    return withStatus(renewed);
   });
 };
 
 // ======================================================
-// TOGGLE PARTNER STATUS (manual override)
+// SET PARTNER STATUS (manual, by an admin)
+//
+// Deactivating needs a reason; the reason, the admin and the time are stored.
+// Renewing or editing never touches this.
 // ======================================================
 
-export const togglePartnerStatus = async (identifier) => {
+export const setPartnerStatus = async (identifier, body, admin) => {
+  const change = parseStatusChange(body, admin);
+
   const partner = await findPartnerRecord(identifier);
 
   if (!partner) {
     throw new Error("Partner not found");
   }
 
-  return prisma.partner.update({
+  const updated = await prisma.partner.update({
     where: { id: partner.id },
-    data: { isActive: !partner.isActive },
+    data: change,
     include: {
       member: {
         select: {
@@ -739,35 +699,8 @@ export const togglePartnerStatus = async (identifier) => {
       city: true,
     },
   });
-};
 
-// ======================================================
-// UPDATE PARTNER ACTIVE STATUS
-// ======================================================
-//
-// Backend calculates status from validity, except for the manual
-// override above — Frontend should not send isActive on create/update.
-// ======================================================
-
-export const updatePartnerActiveStatus = async (partner) => {
-  const status = getPartnerStatus(partner.validityFrom, partner.validityTo);
-
-  const isActive = status === "active";
-
-  // Only update DB if necessary
-  if (partner.isActive !== isActive) {
-    return await prisma.partner.update({
-      where: {
-        id: partner.id,
-      },
-
-      data: {
-        isActive,
-      },
-    });
-  }
-
-  return partner;
+  return withStatus(updated);
 };
 
 // ======================================================

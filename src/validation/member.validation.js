@@ -29,6 +29,11 @@ export const validateMember=[
   body("district")
     .optional(),
 
+  body("validityFrom")
+    .optional({ values: "falsy" })
+    .isISO8601()
+    .withMessage("Invalid Valid From date"),
+
   body("validityTo")
     .optional()
     .isISO8601()
@@ -60,6 +65,11 @@ export const validateMemberRenew = [
     .withMessage("Validity To date is required")
     .isISO8601()
     .withMessage("Invalid Validity To date"),
+
+  body("validityFrom")
+    .optional({ values: "falsy" })
+    .isISO8601()
+    .withMessage("Invalid Valid From date"),
 
   body("amount")
     .optional()
