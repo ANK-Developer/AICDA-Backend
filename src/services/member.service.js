@@ -1,5 +1,5 @@
 import prisma from "../config/prisma.js";
-import { resolveRenewalPeriod, validityFromForEdit, endOfDayIST } from "../utils/validity.js";
+import { resolveRenewalPeriod } from "../utils/validity.js";
 import { parseExpiringDays, parseStatusChange, statusCounts, statusFilterWhere, withStatus } from "../utils/membership.js";
 import { asSpecialDateList, buildSpecialDate, parseSpecialDates, updateSpecialDateInList } from "../utils/specialDates.js";
 const getLocalPhotoPath = (file) => {
@@ -256,15 +256,10 @@ export const updateMember = async (id, req) => {
 
   const body = req.body;
   const photo = req.file ? getLocalPhotoPath(req.file) : undefined;
-  // validityFrom is never client-supplied — if validityTo is being changed
-  // here (rather than through the dedicated renew endpoint), derive it the
-  // same way renew does: the creation day for a first payment, the previous
-  // expiry for an extension.
   const resolvedDateOfJoining = body.dateOfJoining !== undefined ? (body.dateOfJoining ? new Date(body.dateOfJoining) : null) : undefined;
 
-  const resolvedValidityTo = body.validityTo !== undefined ? (body.validityTo ? endOfDayIST(body.validityTo) : null) : undefined;
-  const resolvedValidityFrom = resolvedValidityTo === undefined ? undefined : resolvedValidityTo === null ? null : validityFromForEdit(existing, resolvedValidityTo);
-
+  // Validity dates and payments are never changed here — only the dedicated
+  // /renew endpoint does that (it enforces the overlap / gap rules).
   const data = {
     memberId: body.memberId !== undefined ? Number(body.memberId) : undefined,
     memberName: body.memberName,
@@ -282,8 +277,6 @@ export const updateMember = async (id, req) => {
     companyTelephone: body.companyTelephone,
     packetNo: body.packetNo,
     dateOfJoining: resolvedDateOfJoining,
-    validityFrom: resolvedValidityFrom,
-    validityTo: resolvedValidityTo,
     aadharNo: body.aadharNo,
     state: body.state !== undefined ? body.state || null : undefined,
     district: body.district,
@@ -294,38 +287,12 @@ export const updateMember = async (id, req) => {
     if (data[key] === undefined) delete data[key];
   });
 
-  // Editing the member (rather than using the dedicated /renew endpoint)
-  // can also change validityTo or record an amount paid — e.g. the admin
-  // fixing the expiry date or logging a payment from the edit form. Log a
-  // MemberRenewal the same way create/renew do, but only when something
-  // renewal-worthy actually happened, so routine field edits don't spam
-  // the payment history with no-op entries.
-  const validityActuallyChanged = resolvedValidityTo && (!existing.validityTo || resolvedValidityTo.getTime() !== new Date(existing.validityTo).getTime());
-  const amountProvided = body.amount !== undefined && body.amount !== "";
-  const renewalValidityFrom = resolvedValidityFrom ?? existing.validityFrom;
-  const renewalValidityTo = resolvedValidityTo ?? existing.validityTo;
-  const shouldLogRenewal = (validityActuallyChanged || amountProvided) && renewalValidityFrom && renewalValidityTo;
-
-  return prisma.$transaction(async (tx) => {
-    const updated = await tx.member.update({
-      where: { id: Number(id) },
-      data,
-    });
-
-    if (shouldLogRenewal) {
-      await tx.memberRenewal.create({
-        data: {
-          memberId: Number(id),
-          amount: amountProvided ? body.amount : null,
-          validityFrom: renewalValidityFrom,
-          validityTo: renewalValidityTo,
-          note: body.note || null,
-        },
-      });
-    }
-
-    return withStatus(updated);
+  const updated = await prisma.member.update({
+    where: { id: Number(id) },
+    data,
   });
+
+  return withStatus(updated);
 };
 
 // Manual status change by an admin. Deactivating needs a reason; the reason,

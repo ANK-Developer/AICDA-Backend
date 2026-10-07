@@ -81,19 +81,6 @@ export const startOfDayIST = (value) => {
 export const nextValidityFrom = (previousValidityTo, createdAt) =>
   startOfDayIST(previousValidityTo || createdAt);
 
-// Valid-from to store when an edit form changes the expiry date. A later expiry
-// is a renewal and continues from the old expiry; an equal or earlier one is just
-// a correction and keeps the existing start.
-export const validityFromForEdit = (existing, newValidityTo) => {
-  if (!existing.validityTo) return nextValidityFrom(null, existing.createdAt);
-
-  if (new Date(newValidityTo).getTime() > new Date(existing.validityTo).getTime()) {
-    return nextValidityFrom(existing.validityTo, existing.createdAt);
-  }
-
-  return existing.validityFrom ?? nextValidityFrom(existing.validityTo, existing.createdAt);
-};
-
 // Midnight (start) of today in IST. A record is valid while its expiry is on or
 // after this instant, i.e. through the whole last day.
 export const startOfTodayIST = () => startOfDayIST(new Date());

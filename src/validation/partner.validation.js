@@ -70,5 +70,5 @@ export const renewPartnerSchema = Joi.object({
     "date.format": "Invalid Valid From date",
   }),
   amount: Joi.number().min(0).optional(),
-  note: Joi.string().allow("").optional(),
+  note: Joi.string().max(300).allow("").optional(),
 });

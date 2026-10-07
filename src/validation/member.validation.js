@@ -80,6 +80,12 @@ export const validateMemberRenew = [
     .isFloat({ min: 0 })
     .withMessage("Amount must be a positive number"),
 
+  body("note")
+    .optional()
+    .trim()
+    .isLength({ max: 300 })
+    .withMessage("Note must be 300 characters or fewer"),
+
   (req, res, next) => {
     const errors = validationResult(req);
 

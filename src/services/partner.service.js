@@ -1,5 +1,5 @@
 import prisma from "../config/prisma.js";
-import { resolveRenewalPeriod, validityFromForEdit, endOfDayIST } from "../utils/validity.js";
+import { resolveRenewalPeriod } from "../utils/validity.js";
 import { parseExpiringDays, parseStatusChange, statusCounts, statusFilterWhere, withStatus } from "../utils/membership.js";
 import { asSpecialDateList, buildSpecialDate, parseSpecialDates, updateSpecialDateInList } from "../utils/specialDates.js";
 
@@ -497,98 +497,57 @@ export const updatePartner = async (identifier, data) => {
     city,
 
     dateOfJoining,
-
-    validityTo,
-    amount,
-    note,
   } = { ...data, ...trimLocation(data) };
 
-  // validityFrom is never client-supplied — if validityTo is being changed
-  // here (rather than through the dedicated renew endpoint), derive it the
-  // same way renew does: the creation day for a first payment, the previous
-  // expiry for an extension.
+  // Validity dates and payments are never changed here — only the dedicated
+  // /renew endpoint does that (it enforces the overlap / gap rules).
   const resolvedDateOfJoining = dateOfJoining !== undefined ? (dateOfJoining ? new Date(dateOfJoining) : null) : undefined;
-
-  const resolvedValidityTo = validityTo !== undefined ? (validityTo ? endOfDayIST(validityTo) : null) : undefined;
-  const resolvedValidityFrom = resolvedValidityTo === undefined ? undefined : resolvedValidityTo === null ? null : validityFromForEdit(existingPartner, resolvedValidityTo);
-
-  // Editing the partner (rather than using the dedicated /renew endpoint)
-  // can also change validityTo or record an amount paid. Log a
-  // PartnerRenewal the same way create/renew do, but only when something
-  // renewal-worthy actually happened, so routine field edits don't spam
-  // the payment history with no-op entries.
-  const validityActuallyChanged = resolvedValidityTo && (!existingPartner.validityTo || resolvedValidityTo.getTime() !== new Date(existingPartner.validityTo).getTime());
-  const amountProvided = amount !== undefined && amount !== "";
-  const renewalValidityFrom = resolvedValidityFrom ?? existingPartner.validityFrom;
-  const renewalValidityTo = resolvedValidityTo ?? existingPartner.validityTo;
-  const shouldLogRenewal = (validityActuallyChanged || amountProvided) && renewalValidityFrom && renewalValidityTo;
 
   // -----------------------------------------------
   // Update Partner
   // -----------------------------------------------
 
-  const updatedPartner = await prisma.$transaction(async (tx) => {
-    const partner = await tx.partner.update({
-      where: {
-        id: existingPartner.id,
-      },
+  const updatedPartner = await prisma.partner.update({
+    where: {
+      id: existingPartner.id,
+    },
 
-      data: {
-        partnerName,
-        fatherName,
-        dateOfBirth: dateOfBirth !== undefined ? (dateOfBirth ? new Date(dateOfBirth) : null) : undefined,
-        specialDates: parseSpecialDates(specialDates),
-        photo,
-        residentialAddress,
-        mobile,
-        residentialTelephone,
+    data: {
+      partnerName,
+      fatherName,
+      dateOfBirth: dateOfBirth !== undefined ? (dateOfBirth ? new Date(dateOfBirth) : null) : undefined,
+      specialDates: parseSpecialDates(specialDates),
+      photo,
+      residentialAddress,
+      mobile,
+      residentialTelephone,
 
-        panCardNo,
-        aadharNo,
-        designation,
+      panCardNo,
+      aadharNo,
+      designation,
 
-        // These can be edited independently
-        companyName,
-        companyAddress,
-        companyTelephone,
-        packetNo,
+      // These can be edited independently
+      companyName,
+      companyAddress,
+      companyTelephone,
+      packetNo,
 
-        // An empty string clears the value; undefined leaves it unchanged.
-        state: state !== undefined ? state || null : undefined,
-        district,
-        city: city !== undefined ? city || null : undefined,
+      // An empty string clears the value; undefined leaves it unchanged.
+      state: state !== undefined ? state || null : undefined,
+      district,
+      city: city !== undefined ? city || null : undefined,
 
-        dateOfJoining: resolvedDateOfJoining,
+      dateOfJoining: resolvedDateOfJoining,
+    },
 
-        validityFrom: resolvedValidityFrom,
-
-        validityTo: resolvedValidityTo,
-      },
-
-      include: {
-        member: {
-          select: {
-            memberId: true,
-            memberName: true,
-          },
+    include: {
+      member: {
+        select: {
+          memberId: true,
+          memberName: true,
         },
-
       },
-    });
-
-    if (shouldLogRenewal) {
-      await tx.partnerRenewal.create({
-        data: {
-          partnerId: existingPartner.id,
-          amount: amountProvided ? amount : null,
-          validityFrom: renewalValidityFrom,
-          validityTo: renewalValidityTo,
-          note: note || null,
-        },
-      });
-    }
-
-    return partner;
+    },
   });
 
   return withStatus(updatedPartner);
