@@ -1,6 +1,6 @@
 import prisma from "../config/prisma.js";
 import { resolveLocationIds } from "../utils/location.js";
-import { resolveRenewalPeriod, validityFromForEdit } from "../utils/validity.js";
+import { resolveRenewalPeriod, validityFromForEdit, endOfDayIST } from "../utils/validity.js";
 import { parseExpiringDays, parseStatusChange, statusCounts, statusFilterWhere, withStatus } from "../utils/membership.js";
 import { asSpecialDateList, buildSpecialDate, parseSpecialDates, updateSpecialDateInList } from "../utils/specialDates.js";
 
@@ -309,7 +309,7 @@ export const getAllPartners = async (query = {}) => {
 
   if (search) {
     const term = search.trim();
-    const isNumeric = /^d+$/.test(term);
+    const isNumeric = /^\d+$/.test(term);
 
     where.OR = [
       { partnerName: { contains: term } },
@@ -519,7 +519,7 @@ export const updatePartner = async (identifier, data) => {
   // expiry for an extension.
   const resolvedDateOfJoining = dateOfJoining !== undefined ? (dateOfJoining ? new Date(dateOfJoining) : null) : undefined;
 
-  const resolvedValidityTo = validityTo !== undefined ? (validityTo ? new Date(validityTo) : null) : undefined;
+  const resolvedValidityTo = validityTo !== undefined ? (validityTo ? endOfDayIST(validityTo) : null) : undefined;
   const resolvedValidityFrom = resolvedValidityTo === undefined ? undefined : resolvedValidityTo === null ? null : validityFromForEdit(existingPartner, resolvedValidityTo);
 
   // Editing the partner (rather than using the dedicated /renew endpoint)
